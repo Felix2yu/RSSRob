@@ -1,0 +1,12 @@
+name: hfips-research
+type: html
+url: https://www.hf.cas.cn/lmjx/glbm/kyghc/kyc_kyghc/tzgg/
+title: 科研规划处
+item: "css:ul.list > li"
+fields:
+  title: "css:.text"
+  link: "css:a@href"
+  date: "css:.date"
+article:
+  title: "css:.details .title"
+  content: "css:.details .text"

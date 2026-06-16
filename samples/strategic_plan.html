@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>中国科学院合肥物质科学研究院科研规划处</title>
+    <link rel="stylesheet" type="text/css" href="../../../../../images/ghcl24_base.css">
+    <link rel="stylesheet" type="text/css" href="../../../../../images/ghcl24_project.css">
+    <link rel="stylesheet" type="text/css" href="../../../../../images/ghcl24_swiper.min.css">
+    <script type="text/javascript" src="../../../../../images/ghcl24_jQuery.js"></script>
+    <script type="text/javascript" src="../../../../../images/ghcl24_swiper.min.js"></script>
+</head>
+<body>
+<div class="header">
+    <div class="w">
+        <div class="top">
+            <a href="https://www.cas.cn/" target="_blank">中国科学院</a>
+            <a href="https://hf.cas.cn/" target="_blank">中国科学院合肥物质研究院</a>
+            <a href="https://www.hf.cas.cn/lmjx/glbm/kyghc/kyc_kyghc_old/" target="_blank">旧版主站</a>
+        </div>
+        <div class="bottom">
+            <div class="logo">
+                <a href="../"><img src="../../../../../images/ghcl24_logo.png" /></a>
+            </div>
+
+            <!-- 搜索 -->
+            <form id="searchform" name="searchform" action="https://search.cas.cn/search" method="post" target="_blank" onSubmit="return search_check()" >
+
+                    <!-- <input type="hidden" name="channelid" value="18240" /> -->
+                    <input type="hidden" name="channelid" value="19164" />
+                    <input type="hidden" name="option" value="ideosingle" />
+                    <input type="hidden" name="searchword" value="'2023'" />
+                    <input type="hidden" name="preKeyword" value="2023" />
+
+                    <div class="search">
+                        <input type="text" placeholder="请输入关键字…" name="iptSword" id="iptSword" onfocus="javascript:if(this.value=='请输入关键字') this.value=''" onblur="javascript:if(this.value=='') this.value='请输入关键字'" value="请输入关键字" />
+                        <img src="../../../../../images/ghcl24_search.png" class="btn" />
+                    </div>
+
+            </form>
+
+            <script type="text/javascript">
+                function submit(){
+                    $("#searchform").submit();
+                }
+                function escapeTrs(str){//转义trs关键字
+                    var arr = new Array("\\\\","!","@","#","\\$","\%","\\^","\&","\\*","\\(","\\)","\\_","\\+","\-","\=","\\{","\\}","\\|","\\[","\\]",";","'",":","\"","\<","\>","\\?","\,","\\.","\/");
+
+                    for(var i=0;i<arr.length;i++){
+                        var re = new RegExp(arr[i],"img");
+                        str = str.replace(re, '\\' + arr[i]);
+                    }
+
+                    return str;
+                }
+                function dealKeywords(sword, relation)
+                {
+                    var sTemp = "";
+                    var swordtemp = "";
+                    var sArray;
+
+                    if(sword.indexOf("*")<0&&sword.indexOf("+")<0&&sword.indexOf(")")<0&&sword.indexOf("(")<0&&sword.indexOf("\\")<0)
+                    {
+                        sword = escapeTrs(sword);
+                        //不含trs关键字
+                        sArray = sword.split(" ");//输入框空格处理,空格表示 relation 关系
+                        for(var i=0; i<sArray.length;i++)
+                        {
+                            sTemp = sArray[i].replace(/^\s+|\s+$/g,"");//去掉sword前后空格
+                            if(sTemp!="")
+                            {
+                                swordtemp += "'"+ sTemp + "' "+relation+" ";/*加上''符号,处理trs带运算符的检索词报错的问题*/
+                            }
+                        }
+                        if(swordtemp.lastIndexOf(" "+relation+" ")!=-1)//去掉relation结尾
+                        {
+                            swordtemp = swordtemp.substring(0,swordtemp.length-relation.length-2);
+                        }
+                    }
+
+                    else//包含trs关键字
+                    {
+                        if(sword.indexOf("\\")!=-1){
+                            var re = new RegExp("\\\\","img");
+                            sword = sword.replace(re, '\\\\');
+                        }
+                        swordtemp = "'"+sword+"'";
+                    }
+                    return swordtemp;
+                }
+
+                function search_check() {
+                    var sword =document.getElementById("iptSword").value.replace(/^\s+|\s+$/g,"");
+
+                    if (sword=='' || sword=='请输入关键字') {
+                        alert('请请输入关键字!');
+                        return false;
+                    } else {
+                        document.searchform.searchword.value = dealKeywords(sword, "and");
+                        document.searchform.preKeyword.value = encodeURI(document.getElementById("iptSword").value);//传参前进行编码
+                        document.searchform.submit();
+                    }
+                }
+            </script>
+            <!-- 搜索end -->
+
+
+
+        </div>
+    </div>
+</div>
+
+<div class="nav">
+    <ul class="w">
+        <li class="active">
+            <a href="../">首页</a>
+        </li>
+
+        <li menu="部门介绍">
+            <a href="../bmjs/">部门介绍</a>
+            <dl>
+
+                
+                    <dd>
+                        <a href="../bmjs/bmzz/">
+                            部门职责
+                        </a>
+                    </dd>
+                
+                    <dd>
+                        <a href="../bmjs/ryfg/">
+                            人员分工
+                        </a>
+                    </dd>
+                
+
+            </dl>
+        </li>
+
+        <li menu="通知公告">
+            <a href="./">通知公告</a>
+        </li>
+
+        <li menu="公示">
+            <a href="../gs/">公示</a>
+        </li>
+
+        <li menu="规章制度">
+            <a href="../gzzd/">规章制度</a>
+        </li>
+
+        <li menu="表格下载">
+            <a href="../bgxz/">表格下载</a>
+        </li>
+    </ul>
+</div>
+<!-- end header -->
+
+<script type="text/javascript">
+
+    $(function(){
+        var menu = '通知公告';
+        var p_menu = '科研规划处新版';
+        console.log(p_menu+'/'+menu);
+        //二级栏目
+        if(p_menu=='部门介绍'||p_menu=='规章制度'||p_menu=='表格下载'){
+            $(".nav ul li[menu="+p_menu+"]").addClass('active').siblings("li").removeClass('active');
+
+            $("#menu_2 ul li").removeClass('active');
+            $("#menu_2 ul li[menu="+menu+"]").addClass('active');
+            $("#menu_2").show();
+
+            $("#pos_2").show();
+            $("#pos_1").show();
+        }else{//一级栏目
+            $(".nav ul li[menu="+menu+"]").addClass('active').siblings("li").removeClass('active');
+
+            $("#menu_1").show();
+
+            $("#pos_2").show();
+            $("#pos_1").hide();
+        }
+
+    });
+</script>
+			
+			<div class="content">
+				<div class="w">
+					<div class="menu-list" id="menu_1" style="display:none;">
+    <span>通知公告</span>
+    <ul>
+        <li class="active">
+            <a href="./">
+                <img src="../../../../../images/ghcl24_link.png" class="img" />
+                <img src="../../../../../images/ghcl24_link2.png" class="img2" />
+                通知公告
+            </a>
+        </li>
+    </ul>
+</div>
+
+<div class="menu-list" id="menu_2" style="display:none;">
+    <span>科研规划处新版</span>
+    <ul>
+        
+            <li menu="部门介绍">
+                <a href="../bmjs/">
+                    <img src="../../../../../images/ghcl24_link.png" class="img" />
+                    <img src="../../../../../images/ghcl24_link2.png" class="img2" />
+                    部门介绍
+                </a>
+            </li>
+        
+            <li menu="通知公告">
+                <a href="./">
+                    <img src="../../../../../images/ghcl24_link.png" class="img" />
+                    <img src="../../../../../images/ghcl24_link2.png" class="img2" />
+                    通知公告
+                </a>
+            </li>
+        
+            <li menu="公示">
+                <a href="../gs/">
+                    <img src="../../../../../images/ghcl24_link.png" class="img" />
+                    <img src="../../../../../images/ghcl24_link2.png" class="img2" />
+                    公示
+                </a>
+            </li>
+        
+            <li menu="规章制度">
+                <a href="../gzzd/">
+                    <img src="../../../../../images/ghcl24_link.png" class="img" />
+                    <img src="../../../../../images/ghcl24_link2.png" class="img2" />
+                    规章制度
+                </a>
+            </li>
+        
+            <li menu="表格下载">
+                <a href="../bgxz/">
+                    <img src="../../../../../images/ghcl24_link.png" class="img" />
+                    <img src="../../../../../images/ghcl24_link2.png" class="img2" />
+                    表格下载
+                </a>
+            </li>
+        
+            <li menu="相关链接">
+                <a href="../xglj/">
+                    <img src="../../../../../images/ghcl24_link.png" class="img" />
+                    <img src="../../../../../images/ghcl24_link2.png" class="img2" />
+                    相关链接
+                </a>
+            </li>
+        
+    </ul>
+</div>
+					
+					<div class="view">
+						<div class="link">
+    <span>通知公告</span>
+    <ul>
+        <li>当前位置：</li>
+        <li><a href="../">首页 </a>/</li>
+        <li id="pos_1" style="display: none;">
+            <a href="../">
+            科研规划处新版</a> /
+        </li>
+        <li class="active" id="pos_2" style="display: none;">通知公告</li>
+    </ul>
+</div>
+						
+						<ul class="list">
+
+
+							
+
+								<li>
+									<a href="./202606/t20260612_8227704.html">
+										<div class="text">
+											<img src="../../../../../images/ghcl24_icon.png" />国家自然科学基金委关于国家重点研发“发育编程及其代谢调节”、“合成生物学”重点专项2026年度项目申...
+										</div>
+										<div class="date">2026-06-12</div>
+									</a>
+								</li>
+
+							
+
+								<li>
+									<a href="./202606/t20260609_8219482.html">
+										<div class="text">
+											<img src="../../../../../images/ghcl24_icon.png" />国家自然科学基金民营企业创新发展联合基金（术理创新）项目指南
+										</div>
+										<div class="date">2026-06-09</div>
+									</a>
+								</li>
+
+							
+
+								<li>
+									<a href="./202606/t20260602_8212232.html">
+										<div class="text">
+											<img src="../../../../../images/ghcl24_icon.png" />国家卫生健康委科教司关于“癌症、心脑血管、呼吸和代谢性疾病防治研究”国家科技重大专项2027年度项目...
+										</div>
+										<div class="date">2026-06-02</div>
+									</a>
+								</li>
+
+							
+
+								<li>
+									<a href="./202605/t20260528_8210347.html">
+										<div class="text">
+											<img src="../../../../../images/ghcl24_icon.png" />国家自然科学基金委项目申报通知(2026年5月)
+										</div>
+										<div class="date">2026-05-28</div>
+									</a>
+								</li>
+
+							
+
+								<li>
+									<a href="./202605/t20260515_8202470.html">
+										<div class="text">
+											<img src="../../../../../images/ghcl24_icon.png" />关于申报安徽省生态环境厅2026 年生态环境科技项目的通知
+										</div>
+										<div class="date">2026-05-15</div>
+									</a>
+								</li>
+
+							
+
+								<li>
+									<a href="./202605/t20260512_8200094.html">
+										<div class="text">
+											<img src="../../../../../images/ghcl24_icon.png" />合肥国家实验室关于征集“量子通信与量子计算机”国家科技重大专项公开竞争类项目建议的通知
+										</div>
+										<div class="date">2026-05-12</div>
+									</a>
+								</li>
+
+							
+
+								<li>
+									<a href="./202605/t20260512_8200072.html">
+										<div class="text">
+											<img src="../../../../../images/ghcl24_icon.png" />国家卫生健康委科教司关于“新发突发与重大传染病防控”国家科技重大专项2027年度项目申报指南征求意见...
+										</div>
+										<div class="date">2026-05-12</div>
+									</a>
+								</li>
+
+							
+
+								<li>
+									<a href="./202604/t20260423_8190248.html">
+										<div class="text">
+											<img src="../../../../../images/ghcl24_icon.png" />中国科学院磁共振联盟关于征集2026年度项目申请的通知
+										</div>
+										<div class="date">2026-04-23</div>
+									</a>
+								</li>
+
+							
+
+								<li>
+									<a href="./202604/t20260417_8186850.html">
+										<div class="text">
+											<img src="../../../../../images/ghcl24_icon.png" />关于征集2027年度国家自然科学基金（安徽）区域创新发展联合基金项目指南建议的通知
+										</div>
+										<div class="date">2026-04-17</div>
+									</a>
+								</li>
+
+							
+
+								<li>
+									<a href="./202603/t20260331_8179651.html">
+										<div class="text">
+											<img src="../../../../../images/ghcl24_icon.png" />国家自然科学基金委项目申报通知(2026年3月)
+										</div>
+										<div class="date">2026-03-31</div>
+									</a>
+								</li>
+
+							
+
+								<li>
+									<a href="./202603/t20260330_8179297.html">
+										<div class="text">
+											<img src="../../../../../images/ghcl24_icon.png" />关于开展2026年院长基金优秀青年项目（C类）组织申报工作的通知
+										</div>
+										<div class="date">2026-03-30</div>
+									</a>
+								</li>
+
+							
+
+								<li>
+									<a href="./202603/t20260313_8159212.html">
+										<div class="text">
+											<img src="../../../../../images/ghcl24_icon.png" />国家自然科学基金委员会关于发布2026年度国家自然科学基金企业创新发展联合基金项目指南（第二批）的通知
+										</div>
+										<div class="date">2026-03-13</div>
+									</a>
+								</li>
+
+							
+
+								<li>
+									<a href="./202603/t20260313_8158889.html">
+										<div class="text">
+											<img src="../../../../../images/ghcl24_icon.png" />关于征集2026年度合肥市自然科学（概念验证）基金项目<br>指南建议的通知
+										</div>
+										<div class="date">2026-03-13</div>
+									</a>
+								</li>
+
+							
+
+								<li>
+									<a href="./202603/t20260309_8152060.html">
+										<div class="text">
+											<img src="../../../../../images/ghcl24_icon.png" />国家自然科学基金委员会关于发布“脑科学与类脑研究”国家科技重大专项2026年度项目申报指南的通知
+										</div>
+										<div class="date">2026-03-09</div>
+									</a>
+								</li>
+
+							
+
+								<li>
+									<a href="./202603/t20260305_8147962.html">
+										<div class="text">
+											<img src="../../../../../images/ghcl24_icon.png" />国家卫生健康委科教司关于公开征集创新药物研发国家科技重大专项2027年度立项建议的通知
+										</div>
+										<div class="date">2026-03-05</div>
+									</a>
+								</li>
+
+							
+
+
+						</ul>
+
+						<style>
+    .page a,.page span,.page input{margin-right: 5px;}
+</style>
+<div class="page">
+
+    <script>
+        var currentPage = 0;//所在页从0开始
+        var prevPage = currentPage-1//上一页
+        var nextPage = currentPage+1//下一页
+        var countPage = 2//共多少页
+
+            function select_page(page){
+                if(page==1){
+                    window.location.href="./index.html";
+                }else{
+                    window.location.href="./index_"+(page-1)+".html";
+                }
+            }
+
+        if(countPage>1){
+
+            //设置上一页代码
+            if(countPage>1&&currentPage!=0&&currentPage!=1){
+
+                document.write('<a href="index_'+prevPage+'.html"><img src="../../../../../images/ghcl24_left.png" class="img" /><img src="../../../../../images/ghcl24_left-on.png" class="img-on" />上一页</a>');
+            }else if(countPage>1&&currentPage!=0&&currentPage==1){
+                document.write('<a href="index.html"><img src="../../../../../images/ghcl24_left.png" class="img" /><img src="../../../../../images/ghcl24_left-on.png" class="img-on" />上一页</a>');
+            }else{
+                document.write('<a href="javascript:;"><img src="../../../../../images/ghcl24_left.png" class="img" /><img src="../../../../../images/ghcl24_left-on.png" class="img-on" />上一页</a>');
+            }
+
+            //循环
+            var num = 5;
+            for(var i=0+(currentPage-1-(currentPage-1)%num) ; i<=(num+(currentPage-1-(currentPage-1)%num))&&(i<countPage) ; i++){
+                if(currentPage==i)
+                    document.write('<a href="javascript:;" class="on">'+(i+1)+'</a>');
+                else if(i==0)
+                    document.write('<a href="index.html">'+(i+1)+'</a>');
+                else
+                    document.write('<a href="index_'+i+'.html">'+(i+1)+'</a>');
+            }
+
+            if(countPage>5){
+                document.write('<span>...</span><a href="index_'+(countPage-1)+'.html">2</a>');
+            }
+
+            //设置下一页代码
+            if(countPage>1&&currentPage!=(countPage-1)){
+                document.write('<a href="index_'+nextPage+'.html">下一页<img src="../../../../../images/ghcl24_right.png" class="img" /><img src="../../../../../images/ghcl24_right-on.png" class="img-on" /></a>');
+            }else{
+                document.write('<a href="javascript:;">下一页<img src="../../../../../images/ghcl24_right.png" class="img" /><img src="../../../../../images/ghcl24_right-on.png" class="img-on" /></a>');
+            }
+
+            document.write('<span class="s1">跳到</span><input type="text" class="s1" id="go_page_num" /><span class="s1">页</span><button class="s1" id="go_page">GO</button>');
+
+            // document.write('<li><span class="pl-2">共 '+countPage+' 页</span> </li>');
+
+        }
+        function test_page(num) {
+            if (num=="") {
+                alert('请输入跳转页数');
+                return false;
+            }
+            if (!(/(^[1-9]\d*$)/.test(num))) {
+                alert('输入的页数不是正整数');
+                return false;
+            }else {
+                return true;
+            }
+        }
+        $(function(){
+            $("#go_page").click(function(){
+                // console.log($("#go_page_num").val());
+                let gpn = $("#go_page_num").val();
+                if(test_page(gpn)){
+                    select_page(gpn);
+                }
+            })
+        })
+    </script>
+
+
+</div>
+
+					</div>
+				</div>
+			</div>
+			<!-- end 内容区 -->
+
+<div class="footer">
+    <div class="w">
+        <p class="t">Copyright &copy; 2024  中科院合肥物质科学研究院 · 科研规划处   版权所有   皖ICP备 050001008</p>
+        <p class="t">地址：安徽省合肥市蜀山湖路350号   邮编：230031   传真：0551-65591270   电邮：kyc@hfcas.ac.cn</p>
+    </div>
+</div>
+<!-- end 文件底部 -->
+</body>
+</html>

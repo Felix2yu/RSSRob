@@ -1,0 +1,29 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# RSSRob global settings
+#
+# Every *.yaml file in this configs/ folder is loaded in filename order and
+# merged: these global keys are merged by key (later files win), while feeds are
+# collected from all files. This file (sorted first via the "00-" prefix) holds
+# the globals; put one feed per file alongside it (e.g. ipp-notices.yaml).
+#
+# `defaults` below apply to every feed unless that feed overrides the same key.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Directory where generated feed XML is written and served from.
+output_dir: ./feeds
+
+# SQLite file holding item history + dedup state (the feed's backing store).
+state_db: ./rssrob.db
+
+# Built-in HTTP server that serves /feeds/<name>.xml and the index page.
+http:
+  host: 127.0.0.1      # use 0.0.0.0 to expose on your network
+  port: 8080
+
+# Per-feed defaults (any feed may override these in its own file).
+defaults:
+  interval: 1800              # seconds between scrapes of each feed
+  max_items: 50              # most recent items kept per feed (rolling window)
+  timeout: 20                # HTTP fetch timeout, seconds
+  user_agent: RSSRob/0.1     # User-Agent sent when fetching pages/feeds
+  # proxy: socks5://127.0.0.1:1080   # optional default proxy for feeds that need one

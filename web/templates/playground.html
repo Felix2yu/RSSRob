@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}Selector & filter playground · RSSRob{% endblock %}
+{% block content %}
+<style>
+  form.pg label { display:block; font-size:.78rem; color:#656d76; text-transform:uppercase;
+                  letter-spacing:.03em; margin:.7rem 0 .2rem; }
+  form.pg input[type=text] { width:100%; padding:.45rem .55rem; border:1px solid #d0d7de;
+                  border-radius:7px; font:13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  form.pg .row { display:flex; gap:.8rem; flex-wrap:wrap; }
+  form.pg .row > div { flex:1; min-width:200px; }
+  form.pg .filters { background:#f6f8fa; border:1px solid #d0d7de; border-radius:10px;
+                  padding:.5rem .9rem 1rem; margin-top:1rem; }
+  form.pg .opts { display:flex; gap:1rem; align-items:flex-end; flex-wrap:wrap; }
+  form.pg select { padding:.4rem; border:1px solid #d0d7de; border-radius:7px; }
+  form.pg button { margin-top:1rem; background:#0353a4; color:#fff; border:0;
+                  padding:.55rem 1.4rem; border-radius:7px; font-size:.95rem; cursor:pointer; }
+  form.pg .saverow { display:flex; gap:.6rem; align-items:center; flex-wrap:wrap; margin-top:1.1rem;
+                  border-top:1px dashed #d0d7de; padding-top:1rem; }
+  form.pg .saverow input[type=text] { width:auto; flex:1; min-width:150px; }
+  form.pg .saverow .sep { color:#656d76; font-size:.85rem; }
+  form.pg .saverow button { margin-top:0; }
+  form.pg .saverow button.save { background:#1a7f37; }
+  .ok { border-left:4px solid #1a7f37; background:#dafbe1; color:#1a4d2e;
+        padding:.65rem .9rem; border-radius:6px; margin:1rem 0; font-size:.9rem; }
+  form.pg .typesel { display:flex; gap:1.2rem; margin-top:.2rem; }
+  form.pg .typesel .inline { text-transform:none; margin:0; display:flex;
+        align-items:center; gap:.35rem; font-size:.92rem; color:#1f2328; }
+  .summary-bar { margin:1.2rem 0 .4rem; font-size:.95rem; }
+  .pill { display:inline-block; padding:.1rem .55rem; border-radius:999px; font-size:.78rem;
+          font-weight:600; }
+  .pill.kept { background:#dafbe1; color:#1a7f37; }
+  .pill.drop { background:#ffebe9; color:#82071e; }
+  tr.dropped td { color:#aab1b8; }
+  tr.dropped td.t a { color:#9aa3ad; }
+</style>
+
+  <h1 style="margin:.2rem 0 .2rem; font-size:1.25rem;">Selector &amp; filter playground</h1>
+  <p class="count">Edit the selectors and filter, then run — items are extracted live
+    (with offline fallback) and tagged kept/dropped by your filter.</p>
+
+  {% if saved %}<div class="ok">Saved “{{ saved }}” to your config. It now appears
+    in the site nav and is used by <code>rssrob serve</code>.</div>{% endif %}
+  {% if save_error %}<div class="error">{{ save_error }}</div>{% endif %}
+
+  <form class="pg" method="get" action="{{ url_for('playground') }}">
+    <label>Feed type</label>
+    <div class="typesel">
+      <label class="inline"><input type="radio" name="type" value="html"
+        {{ '' if ptype == 'rss' else 'checked' }}> HTML page (selectors)</label>
+      <label class="inline"><input type="radio" name="type" value="rss"
+        {{ 'checked' if ptype == 'rss' else '' }}> RSS / Atom feed (no selectors)</label>
+    </div>
+
+    <label>Page / feed URL</label>
+    <input type="text" name="url" value="{{ form.url }}">
+
+    <div class="html-only"{% if ptype == 'rss' %} style="display:none"{% endif %}>
+      <label>Item selector (css: or xpath:)</label>
+      <input type="text" name="item" value="{{ form.item }}">
+
+      <div class="row">
+        <div><label>title</label><input type="text" name="title_sel" value="{{ form.title_sel }}"></div>
+        <div><label>link</label><input type="text" name="link_sel" value="{{ form.link_sel }}"></div>
+        <div><label>date</label><input type="text" name="date_sel" value="{{ form.date_sel }}"></div>
+      </div>
+    </div>
+
+    <label>proxy (optional — for feeds behind a firewall)</label>
+    <input type="text" name="proxy" value="{{ form.proxy }}"
+           placeholder="socks5://127.0.0.1:1080  or  http://127.0.0.1:7890">
+
+    <div class="filters">
+      <div class="row">
+        <div><label>include (any of, comma-separated)</label>
+          <input type="text" name="include" value="{{ include }}"></div>
+        <div><label>exclude (any of, comma-separated)</label>
+          <input type="text" name="exclude" value="{{ exclude }}"></div>
+      </div>
+      <div class="opts">
+        <div><label>filter field</label>
+          <select name="field">
+            {% for f in ["title", "link", "date", "summary"] %}
+              <option value="{{ f }}" {{ 'selected' if field == f else '' }}>{{ f }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <label style="text-transform:none; margin:0;">
+          <input type="checkbox" name="regex" {{ 'checked' if regex else '' }}> regex match
+        </label>
+      </div>
+    </div>
+
+    <div class="saverow">
+      <button type="submit">Run</button>
+      <span class="sep">or save the current selectors + filter →</span>
+      <input type="text" name="name" value="{{ request.args.get('name', '') }}"
+             placeholder="site name (e.g. hf-kyghc-tzgg)">
+      <input type="text" name="site_title" value="{{ request.args.get('site_title', '') }}"
+             placeholder="feed title (optional)">
+      <button type="submit" class="save" formmethod="post"
+              formaction="{{ url_for('save') }}">Save to config</button>
+    </div>
+  </form>
+
+  {% if error %}
+    <div class="error" style="margin-top:1.2rem;">{{ error }}</div>
+  {% elif results is not none %}
+    <div class="summary-bar">
+      <strong>{{ kept_n }}</strong> kept / {{ total }} matched
+      {% if source == "live" %}<span class="badge live">● live</span>
+      {% elif source == "saved" %}<span class="badge saved">● saved copy</span>{% endif %}
+    </div>
+    {% if results %}
+    <table>
+      <thead><tr><th>#</th><th>Filter</th><th>Date</th><th>Title</th></tr></thead>
+      <tbody>
+        {% for r in results %}
+        <tr class="{{ '' if r.kept else 'dropped' }}">
+          <td class="n">{{ loop.index }}</td>
+          <td><span class="pill {{ 'kept' if r.kept else 'drop' }}">{{ r.reason }}</span></td>
+          <td class="d">{{ r.item.date or "—" }}</td>
+          <td class="t">
+            {% if r.item.link %}
+              <a href="{{ r.item.link }}" target="_blank">{{ r.item.title or "(untitled)" }}</a>
+            {% else %}{{ r.item.title or "(untitled)" }}{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+      <div class="notice">No items found. Check the selectors (HTML) or the feed URL (RSS).</div>
+    {% endif %}
+  {% endif %}
+
+<script>
+  // hide the selector fields when previewing an RSS feed
+  (function () {
+    const box = document.querySelector('.html-only');
+    const radios = document.querySelectorAll('input[name=type]');
+    function update() {
+      const rss = document.querySelector('input[name=type][value=rss]').checked;
+      if (box) box.style.display = rss ? 'none' : '';
+    }
+    radios.forEach(r => r.addEventListener('change', update));
+    update();
+  })();
+</script>
+{% endblock %}

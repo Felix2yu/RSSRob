@@ -1,0 +1,4 @@
+[tool.pytest.ini_options]
+# repo root on sys.path so `import rssrob` works; tests live in tests/
+pythonpath = ["."]
+testpaths = ["tests"]

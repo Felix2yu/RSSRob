@@ -1,0 +1,4 @@
+name: python-insider
+type: rss
+url: https://blog.python.org/feeds/posts/default
+interval: 3600

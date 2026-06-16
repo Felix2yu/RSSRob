@@ -1,0 +1,9 @@
+name: ipp-notices
+type: html
+url: http://www.ipp.cas.cn/
+title: IPP 通知公告
+item: "xpath://h2[normalize-space()='通知公告']/ancestor::div[contains(@class,'ipp2020-item')][1]//div[@class='bd']//ul/li"
+fields:
+  title: "xpath:.//a"
+  link: "xpath:.//a/@href"
+  date: "xpath:.//span"

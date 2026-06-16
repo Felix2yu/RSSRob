@@ -1,0 +1,12 @@
+name: hfips-yjsc
+type: html
+url: https://hf.cas.cn/sbpy/yjsc/tzgg/
+title: 研究生处
+item: "css:.article-item"
+fields:
+  title: "css:.article-title a"
+  link: "css:.article-title a@href"
+  date: "css:.article-time"
+article:
+  title: "css:.article-title-box"
+  content: "css:.article-detail-box"

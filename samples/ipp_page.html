@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta content="IE=Edge" http-equiv="X-UA-Compatible"></meta>
+<link href="./images/ipp2020_base.css" rel="stylesheet">
+<script src="./images/ipp2020_jquery.js"></script>
+<script src="./images/ipp2020_jquery.SuperSlide.js"></script>
+<title>中国科学院等离子体物理研究所</title>
+<style>
+@media (max-width:1300px) {
+	body { min-width: 1230px; }
+	.g-in { width: 1230px; }
+	.ipp2020-news { width: 440px; }
+	.wx-col-z .fl { width: 406px; }
+	.wx-col-z .fr,
+	.wx-col-b .fr { width: 417px; }
+	.ipp2020-link li,
+	.ipp2020-link li a { width: 92px; }
+	.wx-col-b .fl { width: 790px; }
+	.ipp2020-footer-link li,
+	.ipp2020-footer-link li select { width: 196px; }
+	.ipp2020-footer .fl,
+	.ipp2020-ft-nav ul { width: 730px!important; }
+	.ipp2020-footer .fr { width: 460px; padding-left: 30px; }
+	.ipp2020-footer .fr .qr { width: 120px!important; }
+	.ipp2020-list-300 li a { width: 248px!important; }
+	.ipp2020-list-470 li a { width: 300px!important; }
+	.ipp2020-jj li img { width: 200px!important; height: auto!important; }
+}
+</style>
+</head>
+<body>
+<div class="navbar">
+	<div class="g-in clearfix">
+		<div class="ipp2020-t1 fl">
+			<ul class="clearfix">
+				<li class="ti3"><i></i><a href="javaScript:void(0);" onclick="addFavorite()">收藏本站</a></li>
+			</ul>
+		</div>
+		<div class="ipp2020-t1 fr">
+			<ul class="clearfix">
+				<li class="ti1"><i></i><a href="http://www.cas.cn/" target="_blank">中国科学院</a></li>
+				<li class="ti2"><i></i><a href="http://www.hf.cas.cn/" target="_blank">中科院合肥研究院</a></li>
+				<li class="ti6"><i></i><a id="ITER中心" href="http://www.iterchina.cn/" target="_blank">ITER中心</a></li>
+				<li class="ti4"><i></i><a href="mailto://directors@ipp.ac.cn">所长信箱</a></li>
+				<li class="ti4"><i></i><a href="mailto://jiwei@ipp.ac.cn">信访投诉：jiwei@ipp.ac.cn</a></li>
+				<li class="ti5"><i></i><a href="http://english.ipp.cas.cn/" target="_blank">English</a></li>
+			</ul>
+		</div>
+	</div>
+</div>
+<div class="ipp2020-header">
+	<div class="ipp2020-header-bg" style="background: url(./images/ipp20201020_hd.jpg) no-repeat 50%; height: 198px;"></div>
+</div>
+<style>
+.ipp2020-nav>ul>li>a {margin: 0 5px;}
+.ipp2020-t3 li { color: #333; }
+</style>
+<div class="ipp2020-nav">
+	<ul class="g-in clearfix">
+		<li submenu="网站首页"><a href="http://www.ipp.cas.cn/" target=_top>网站首页</a></li>
+		<li id="m2" submenu="单位概况" class="m"><a href="http://www.ipp.cas.cn/dwgk/" target="_top" id="单位概况">单位概况</a>
+			<ul class="sub" style="display: none;">
+				
+					<li><a href="http://www.ipp.cas.cn/dwgk/bsjj/">本所简介</a></li>
+				
+					<li><a href="http://www.ipp.cas.cn/dwgk/xrld/">现任领导</a></li>
+				
+					<li><a href="http://www.ipp.cas.cn/dwgk/lrld/">历任领导</a></li>
+				
+					<li><a href="http://www.ipp.cas.cn/dwgk/xswyh/">学术委员会</a></li>
+				
+					<li><a href="http://www.ipp.cas.cn/dwgk/xwwyh/">学位委员会</a></li>
+				
+					<li><a href="http://www.ipp.cas.cn/dwgk/ldgh/">领导关怀</a></li>
+				
+					<li><a href="http://www.ipp.cas.cn/dwgk/bsxt/">ASIPP标识</a></li>
+				
+			</ul>
+		</li>
+		<li id="m3" submenu="机构设置"><a id="机构设置" href="http://www.ipp.cas.cn/jgsz/" target="_top">机构设置</a></li>
+		<li id="m11" submenu="大科学工程" class="m"><a id="大科学工程" href="javascript:void(0)" target="_top">大科学工程</a>
+			<ul class="sub" style="display: none;">
+				
+					<li><a href="http://www.ipp.cas.cn/dakexuegongcheng/ht_7/">HT-7</a></li>
+				
+					<li><a href="http://www.ipp.cas.cn/dakexuegongcheng/east/">EAST</a></li>
+				
+					<li><a href="http://www.ipp.cas.cn/dakexuegongcheng/iter/">ITER</a></li>
+				
+					<li><a href="http://craft.ipp.ac.cn/index.aspx">CRAFT</a></li>
+				
+					<li><a href="http://www.ipp.cas.cn/dakexuegongcheng/CFETR/">CFETR</a></li>
+				
+			</ul>
+		</li>
+		<li id="m4" submenu="人才队伍" class="m"><a id="人才队伍" href="http://www.ipp.cas.cn/rcdw/" target="_top">人才队伍</a>
+			<ul class="sub" style="display: none;">
+				
+					<li><a href="http://www.ipp.cas.cn/rcdw/rcgk/">人才概况</a></li>
+				
+					<li><a href="http://www.ipp.cas.cn/rcdw/ys/">院士</a></li>
+				
+					<li><a href="http://www.ipp.cas.cn/rcdw/jcqn/">杰出青年</a></li>
+				
+					<li><a href="http://www.ipp.cas.cn/rcdw/yjy/">研究员</a></li>
+				
+					<li><a href="http://www.ipp.cas.cn/rcdw/fyjy/">副研究员</a></li>
+				
+			</ul>
+		</li>
+		<li id="m5" submenu="科研成果" class="m"><a id="科研成果" href="http://www.ipp.cas.cn/kycg/" target="_top">科研成果</a>
+			<ul class="sub" style="display: none;">
+				
+					<li><a href="http://202.127.205.54/pinboard/">科技论文</a></li>
+				
+					<li><a href="http://www.ipp.cas.cn/kycg/kjzl/">科技专利</a></li>
+				
+					<li><a href="http://www.ipp.cas.cn/kycg/kyhj/">科研获奖</a></li>
+				
+					<li><a href="http://www.ipp.cas.cn/kycg/zzrj/">专著</a></li>
+				
+					<li><a href="http://zscq.ahsdldq.com/admin/login.html">知识产权平台</a></li>
+				
+			</ul>
+		</li>
+		<li id="m6" submenu="合作交流" class="m"><a id="合作交流" href="javascript:void(0)" target="_top">合作交流</a>
+			<ul class="sub" style="display: none;">
+				<li><a href="/hzjl/hzjl/hzgk/">国际合作</a></li>
+				<li><a href="/hzjl/sdhz/sdhz_hzgk/">所地合作</a></li>
+			</ul>
+		</li>
+		<li id="m7" submenu="招生招聘" class="m"><a id="招生招聘" href="javascript:void(0)">招生招聘</a>
+            <ul class="sub" style="display: none;">
+				
+				<!-- <li><a href="http://www.hf.cas.cn/sbpy/yjsb/" target="_blank">招生</a></li>
+				<li><a href="http://202.127.204.49:8888/" target="_blank">招聘</a></li> -->
+			</ul>
+        </li>
+		<li id="m9" submenu="党建群团" class="m"><a id="党建群团" href="javascript:void(0)" >党建群团</a>
+			<ul class="sub" style="display: none;">
+				<li><a href="http://www.ipp.cas.cn/zgdj/" target="_blank">党建工作</a></li>
+				<li><a href="/dqyd/asippqnzs/">ASIPP青年之声</a></li>
+			</ul>
+		</li>
+		<li id="m8" submenu="科学传播" class="m"><a id="科学传播" href="javascript:void(0)" >科学传播</a>
+			<ul class="sub" style="display: none;">
+				<li><a href="http://www.ipp.cas.cn/kxcb/" target="_blank">科普网站</a></li>
+				<li><a href="/kxcb/kxyy/">科普参观预约</a></li>
+			</ul>
+		</li>
+		<li id="m9" submenu="内部信息"><a id="内部信息" href="http://home.ipp.ac.cn/" target="_blank">内部信息</a></li>
+		<li id="m10" class="search-icon"><i></i>
+			<div class="ipp2020-t2">
+				<form name="searchform" action="//irssub.cas.cn/irs-c-web/search.shtml" method="get"  target="_top" onsubmit="return search_check()">
+					<!-- <input type="hidden" name="keyword" value="" /> -->
+					<input type="hidden" name="code" value="19463a1f5e7" />
+					<input class="fl inp1" id="searchword" type="text" name="searchWord" onClick="javascript:if(this.value=='请输入关键字') this.value=''" placrholder="请输入关键词.." x-webkit-speech="" />
+					<input class="fr inp2" id="imageField" type="submit" value="" />
+				</form>
+			</div>
+		</li>
+	</ul>
+</div>
+<script>jQuery(".ipp2020-nav").slide({ type:"menu",  titCell:".m", targetCell:".sub",effect:"slideDown", delayTime:300, triggerTime:0,returnDefault:true  });</script>
+<script>
+	// 加入收藏
+	function addFavorite(sURL, sTitle){
+		try{
+			window.external.addFavorite(sURL, sTitle);
+		}catch (e){
+			try{
+				window.sidebar.addPanel(sTitle, sURL, "");
+			}catch (e){
+				alert("您使用的浏览器不支持此功能，请使用Ctrl+D进行添加");
+			}
+		}
+	}
+	// 搜索检索
+	function isValid(str){
+	  if(str.indexOf('&') != -1 || str.indexOf('<') != -1 || str.indexOf('>') != -1 || str.indexOf('\'') != -1
+		|| str.indexOf('\\') != -1 || str.indexOf('/') != -1 || str.indexOf('"') != -1 
+		|| str.indexOf('%') != -1 || str.indexOf('#') != -1){
+		return false;
+	  }
+	  return true;
+	}
+	function search_check(){
+	  var searchword = document.getElementById("searchword").value.replace(/^\s+|\s+$/g,"");
+	  if(searchword == "" || searchword == "请输入关键字" || !isValid(searchword)){
+		alert("请输入关键词后再进行提交。");
+		return false;
+	  }else{
+		document.getElementsByName("keyword")[0].value = encodeURI(searchword);
+		//document.getElementById("keyword").value = encodeURI(searchword);
+		document.searchform.submit();
+	  }
+	}
+</script>
+<script>
+$(function() {
+	var topmen = "";
+	if(topmen != ''){
+		$(".ipp2020-nav li").removeClass('cur');
+		$("#" + topmen).parent().addClass('cur').siblings().removeClass('cur');
+	}else{
+		$(".ipp2020-nav li").eq(0).addClass('cur');
+	}
+});
+</script>
+<!-- end nav -->
+
+<div class="ipp2020-container">
+	<div class="wx-col-a">
+		<div class="g-in clearfix">
+			<div class="ipp2020-focus fl">
+				<div class="mc">
+					<ul>
+						
+							<li><a href="./xwdt/tpxw/202606/t20260603_840776.html" target="_blank">
+								<div class="pic"><img src="./xwdt/tpxw/202606/W020260604333492539713.jpg" alt="等离子体所举办2026届研究生毕业典礼" title="等离子体所举办2026届研究生毕业典礼" width="790" height="480" /></div>
+								<div class="txt">等离子体所举办2026届研究生毕业典礼</div>
+							</a></li>
+						
+							<li><a href="./xwdt/tpxw/202605/t20260526_839512.html" target="_blank">
+								<div class="pic"><img src="./xwdt/tpxw/202605/W020260526310429327896.png" alt="等离子体所深度参与ITER磁体冷测设施建设" title="等离子体所深度参与ITER磁体冷测设施建设" width="790" height="480" /></div>
+								<div class="txt">等离子体所深度参与ITER磁体冷测设施建设</div>
+							</a></li>
+						
+							<li><a href="./xwdt/tpxw/202605/t20260518_838152.html" target="_blank">
+								<div class="pic"><img src="./xwdt/tpxw/202605/W020260518372844220216.png" alt="中国科学院第二十二届公众科学日活动举办" title="中国科学院第二十二届公众科学日活动举办" width="790" height="480" /></div>
+								<div class="txt">中国科学院第二十二届公众科学日活动举办</div>
+							</a></li>
+						
+							<li><a href="./xwdt/tpxw/202605/t20260501_835977.html" target="_blank">
+								<div class="pic"><img src="./xwdt/tpxw/202605/W020260501596516335190.png" alt="聚变追梦人 实干加速跑——劳动者永远在..." title="聚变追梦人 实干加速跑——劳动者永远在路上" width="790" height="480" /></div>
+								<div class="txt">聚变追梦人 实干加速跑——劳动者永远在路上</div>
+							</a></li>
+						
+					</ul>
+				</div>
+				<div class="mt"><ul></ul></div>
+			</div>
+			<script>jQuery(".ipp2020-focus").slide({titCell:".mt ul",mainCell:".mc ul",effect:"leftLoop",autoPlay:true,autoPage:true});</script>
+			<div class="ipp2020-news fr">
+				<div class="hd">
+					<h2>头条新闻</h2>
+					<p class="more"><a href="./xwdt/ttxw/" title='查看更多'>更多</a></p>
+				</div>
+				<div class="bd ">
+					<style>
+						.ipp2020-news-hot h2 { white-space: nowrap; text-overflow: ellipsis; -o-text-overflow: ellipsis; overflow: hidden; font-size: 24px; }
+					</style>
+					
+						<div class="ipp2020-news-hot" OLDID="2520" RELATED="1">
+							<h2><a href="./xwdt/ttxw/202606/t20260603_840770.html" target="_blank" title="等离子体所举办2026届研究生毕业典礼">等离子体所举办2026届研究生毕业典礼</a></h2>
+							<div class="d">2026-06-03</div>
+							<div class="t">6月2日上午，等离子体所在CRAFT园区一楼报告厅举行“铸聚变华章，追强国之光”2026届研究生毕业典礼。</div>
+						</div>
+                    
+                    <style>
+                        .ipp2020-list-470 li a { width: 470px; font-size:18px; }
+                    </style>
+					<ul class="ipp2020-list-1 ipp2020-list-470">
+						
+							<li><span>05-26</span><a href="./xwdt/ttxw/202605/t20260526_839510.html" target="_blank">等离子体所深度参与ITER磁体冷测设施建设 </a></li>
+						
+							<li><span>05-18</span><a href="./xwdt/ttxw/202605/t20260518_838151.html" target="_blank">中国科学院第二十二届公众科学日活动举办 </a></li>
+						
+							<li><span>05-01</span><a href="./xwdt/ttxw/202604/t20260430_835946.html" target="_blank">聚变追梦人 实干加速跑——劳动者永远在路上 </a></li>
+						
+							<li><span>04-27</span><a href="./xwdt/ttxw/202604/t20260427_835296.html" target="_blank">等离子体所获“全国五一劳动奖” </a></li>
+						
+							<li><span>04-26</span><a href="./xwdt/ttxw/202604/t20260430_835787.html" target="_blank">等离子体所推动AI+聚变深度融合 </a></li>
+						
+					</ul>
+				</div>
+			</div>
+		</div>
+	</div>
+	<div class="wx-col-z wx-col-z-fg wx-mb25">
+		<div class="g-in clearfix">
+			<div class="fl">
+				<div class="ipp2020-item ipp2020-item-1">
+					<div class="hd">
+						<h2>科研动态</h2>
+						<p class="more"><a href="./xwdt/kydt/" title='查看更多'>查看更多</a></p>
+					</div>
+					<div class="bd">
+						
+							<div class="ipp2020-item-hot">
+								<div class="pic"><img src="./xwdt/kydt/202605/W020260527561342099439.png" alt="2026年PST期刊第一届青年编委会成立暨线..." title="2026年PST期刊第一届青年编委会成立暨线上工作会议举行" width="156" height="100" /></div>
+								<div class="txt">
+									<h4><a href="./xwdt/kydt/202605/t20260527_839924.html" target="_blank" title="2026年PST期刊第一届青年编委会成立暨线上工作会议举行">2026年PST期刊第一届青年编委会成立暨线上工作会议举行</a></h4>
+									<p>05-27</p>
+								</div>
+							</div>
+                        
+                        <style>
+                            .ipp2020-list-300 li a { width: 300px; }
+                        </style>
+						<ul class="ipp2020-list-1 ipp2020-list-300">
+							
+								<li><span>05-21</span><a href="./xwdt/kydt/202605/t20260521_839157.html" target="_blank">第三届电子束与离子束青年学术论坛召开 </a></li>
+							
+								<li><span>05-11</span><a href="./xwdt/kydt/202605/t20260511_837246.html" target="_blank">第四届全国直线等离子体装置研讨会召开 </a></li>
+							
+								<li><span>04-30</span><a href="./xwdt/kydt/202604/t20260430_835786.html" target="_blank">等离子体所完成ITER TAC1馈线系统安装... </a></li>
+							
+								<li><span>04-27</span><a href="./xwdt/kydt/202604/t20260427_835255.html" target="_blank">等离子体所在等离子体诱变微藻育种及... </a></li>
+							
+								<li><span>04-07</span><a href="./xwdt/kydt/202604/t20260407_829196.html" target="_blank">国家磁约束核聚变能发展研究专项多个... </a></li>
+							
+								<li><span>04-07</span><a href="./xwdt/kydt/202604/t20260407_829121.html" target="_blank">等离子体所承担ITER磁体冷测试平台供... </a></li>
+							
+						</ul>
+					</div>
+				</div>
+			</div>
+			<div class="fl">
+				<div class="ipp2020-item ipp2020-item-2">
+					<div class="hd">
+						<h2>综合新闻</h2>
+						<p class="more"><a href="./xwdt/zhxw/" title='查看更多'>查看更多</a></p>
+					</div>
+					<div class="bd">
+						
+							<div class="ipp2020-item-hot">
+								<div class="pic"><img src="./xwdt/zhxw/202606/W020260615335271530250.png" alt="等离子体所在第八届科学岛科普讲解比赛..." title="等离子体所在第八届科学岛科普讲解比赛中获佳绩" width="156" height="100" /></div>
+								<div class="txt">
+									<h4><a href="./xwdt/zhxw/202606/t20260615_841840.html" target="_blank" title="等离子体所在第八届科学岛科普讲解比赛中获佳绩">等离子体所在第八届科学岛科普讲解比赛中获佳绩</a></h4>
+									<p>06-15</p>
+								</div>
+							</div>
+						
+						<ul class="ipp2020-list-1 ipp2020-list-300">
+							
+								<li><span>06-06</span><a href="./xwdt/zhxw/202606/t20260606_841140.html" target="_blank">等离子体所举办2026年安全生产月启动仪式 </a></li>
+							
+								<li><span>06-03</span><a href="./xwdt/zhxw/202606/t20260603_840766.html" target="_blank">等离子体所举办第八届"逐日杯"篮球比赛 </a></li>
+							
+								<li><span>05-29</span><a href="./xwdt/zhxw/202605/t20260529_840107.html" target="_blank">等离子体所举办2026届研究生毕业季植... </a></li>
+							
+								<li><span>05-29</span><a href="./xwdt/zhxw/202605/t20260529_840108.html" target="_blank">等离子体所举办乒乓球单打比赛 </a></li>
+							
+								<li><span>05-21</span><a href="./xwdt/zhxw/202605/t20260521_839130.html" target="_blank">等离子体所第七届春季五人制足球联赛... </a></li>
+							
+								<li><span>05-15</span><a href="./xwdt/zhxw/202605/t20260515_838058.html" target="_blank">国家自然科学基金委员会、中国香港高... </a></li>
+							
+						</ul>
+					</div>
+				</div>
+			</div>
+			<div class="fr">
+				<div class="ipp2020-item ipp2020-item-5">
+					<div class="hd">
+						<h2>党的建设</h2>
+						<p class="more"><a href="./xwdt/djgz/" title='查看更多'>查看更多</a></p>
+					</div>
+					<div class="bd">
+						
+							<div class="ipp2020-item-hot">
+								<div class="pic"><img src="./xwdt/djgz/202606/W020260610329473554017.png" alt="等离子体所召开党委（扩大）会" title="等离子体所召开党委（扩大）会" width="156" height="100" /></div>
+								<div class="txt">
+									<h4><a href="./xwdt/djgz/202606/t20260610_841357.html" target="_blank" title="等离子体所召开党委（扩大）会">等离子体所召开党委（扩大）会</a></h4>
+									<p>06-10</p>
+								</div>
+							</div>
+						
+						<ul class="ipp2020-list-1 ipp2020-list-300">
+							
+								<li><span>06-02</span><a href="./xwdt/djgz/202606/t20260602_840371.html" target="_blank">等离子体所召开党委（扩大）会议 </a></li>
+							
+								<li><span>04-22</span><a href="./xwdt/djgz/202604/t20260422_834375.html" target="_blank">ASIPP党建课堂第五十六讲 </a></li>
+							
+								<li><span>04-20</span><a href="./xwdt/djgz/202604/t20260420_831208.html" target="_blank">等离子体所召开党委（扩大）会议 </a></li>
+							
+								<li><span>03-25</span><a href="./xwdt/djgz/202603/t20260323_827181.html" target="_blank">等离子体所召开党委理论学习中心组（... </a></li>
+							
+								<li><span>02-05</span><a href="./xwdt/djgz/202602/t20260205_823216.html" target="_blank">等离子体所召开党委理论学习中心组扩... </a></li>
+							
+								<li><span>01-13</span><a href="./xwdt/djgz/202601/t20260113_817238.html" target="_blank">等离子体所召开2025年度党建纪检工作... </a></li>
+							
+						</ul>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+	<div class="wx-col-x">
+		<div class="g-in ">
+			<div class="bd">
+				<ul class="ipp2020-zt clearfix">
+					
+						<li><a href="./zhuanti/ASIPPdjkt/" target="_blank"><img src="./zhuanti/ASIPPdjkt/images/P020220729300075199192.jpg" width="452" height="102" alt="" /></a></li>
+					
+						<li><a href="./zhuanti/mzyy/" target="_blank"><img src="./zhuanti/mzyy/images/P020220104640581205701.png" width="452" height="102" alt="" /></a></li>
+					
+						<li><a href="./zhuanti/yjyjt/" target="_blank"><img src="./zhuanti/yjyjt/images/P020220729300238001007.jpg" width="452" height="102" alt="" /></a></li>
+					
+						<li><a href="./zhuanti/asm/" target="_blank"><img src="./zhuanti/asm/images/P020260512583227571591.png" width="452" height="102" alt="" /></a></li>
+					
+				</ul>
+			</div>
+		</div>
+	</div>
+	<script>jQuery(".wx-col-x").slide({mainCell:".bd ul",autoPlay:true,effect:"leftMarquee",vis:3,interTime:50,trigger:"click"});</script>
+	<div class="wx-col-z wx-mb25">
+		<div class="g-in clearfix">
+			<div class="fl">
+				<div class="ipp2020-item ipp2020-item-3">
+					<div class="hd">
+						<h2>学术报告</h2>
+						<p class="more"><a href="./xueshujiaoliu/" title='查看更多'>查看更多</a></p>
+					</div>
+					<div class="bd">
+						<ul class="ipp2020-list-1 ipp2020-list-300">
+							
+								<li><span>06-11</span><a href="./xueshujiaoliu/xueshubaogao/202606/t20260611_841434.html" target="_blank">6月12日 五室第317期研讨会 </a></li>
+							
+								<li><span>06-09</span><a href="./xueshujiaoliu/xueshubaogao/202606/t20260609_841289.html" target="_blank">6月15日 ASIPP Science Meeting会议 </a></li>
+							
+								<li><span>06-04</span><a href="./xueshujiaoliu/xueshubaogao/202606/t20260604_840899.html" target="_blank">6月5日 五室第316期研讨会 </a></li>
+							
+								<li><span>06-03</span><a href="./xueshujiaoliu/xueshubaogao/202606/t20260603_840586.html" target="_blank">6月8日 ASIPP Science Meeting会议 </a></li>
+							
+								<li><span>05-29</span><a href="./xueshujiaoliu/xueshubaogao/202605/t20260529_840138.html" target="_blank">6月1日 ASIPP Science Meeting会议 </a></li>
+							
+								<li><span>05-29</span><a href="./xueshujiaoliu/xueshubaogao/202605/t20260529_840105.html" target="_blank">6月3日 原子核的手征对称性自发破缺研究 </a></li>
+							
+						</ul>
+					</div>
+				</div>
+			</div>
+			<div class="fl">
+				<div class="ipp2020-item ipp2020-item-4">
+					<div class="hd">
+						<h2>通知公告</h2>
+						<p class="more"><a href="./tzgg/" title='查看更多'>查看更多</a></p>
+					</div>
+					<div class="bd">
+						<ul class="ipp2020-list-1 ipp2020-list-300">
+							
+								<li><span>06-15</span><a href="./tzgg/tz_zhb/202606/t20260615_841876.html" target="_blank">关于开展等离子体所辐射安全培训的通知 <img src="./images/new.gif" /></a></li>
+							
+								<li><span>06-15</span><a href="./tzgg/tz_zhb/202606/t20260615_841835.html" target="_blank">关于开展“ASIPP党建课堂”第57期活动... <img src="./images/new.gif" /></a></li>
+							
+								<li><span>06-08</span><a href="./tzgg/tz_zhb/202606/t20260608_841165.html" target="_blank">关于参加第10届亚太等离子体物理学会... </a></li>
+							
+								<li><span>06-03</span><a href="./tzgg/tz_zhb/202606/t20260603_840592.html" target="_blank">关于开展2026年安全生产月危险源辨识... </a></li>
+							
+								<li><span>05-26</span><a href="./tzgg/tz_zhb/202605/t20260526_839565.html" target="_blank">关于参加第三届聚变装置长脉冲运行技... </a></li>
+							
+								<li><span>05-20</span><a href="./tzgg/tz_yjsb/202605/P020260526367527003557.pdf" target="_blank">2026年度夏季等离子体物理研究所博士... </a></li>
+							
+						</ul>
+					</div>
+				</div>
+			</div>
+			<div class="fr">
+				<div class="cbs-item">
+					<div class="hd">
+						<h2>公共服务</h2>
+					</div>
+				</div>
+				<ul class="ipp2020-link clearfix">
+					<li class="ipp2020-link-1"><a href="https://mail.cstnet.cn/" target="_blank" title="邮箱登录"><i></i>邮箱登录</a></li>
+					<li class="ipp2020-link-2"><a href="http://cgpt.hfcas.ac.cn:8091/login.jsp" target="_blank" title="采购平台"><i></i>采购平台</a></li>
+					<li class="ipp2020-link-3"><a href="https://hfcas.arp.cn/" target="_blank" title="ARP系统"><i></i>ARP系统</a></li>
+					<li class="ipp2020-link-4"><a href="http://home.ipp.ac.cn/" target="_blank" title="内部信息"><i></i>内部信息</a></li>
+					<li class="ipp2020-link-9"><a href="http://home.ipp.ac.cn/info.asp?second_id=5017" target="_blank" title="园区信息"><i></i>园区信息</a></li>
+				</ul>
+				<ul class="ipp2020-link clearfix">
+					<li class="ipp2020-link-5"><a href="http://pst.hfcas.ac.cn/EN/2058-6272/home.shtml" target="_blank" title="PST期刊"><i></i>PST期刊</a></li>
+					<li class="ipp2020-link-6"><a href="http://210.73.18.10/library/index.php" target="_blank" title="图书资源"><i></i>图书资源</a></li>
+					<li class="ipp2020-link-7"><a href="http://202.127.205.54/wiki" target="_blank" title="EASTWIKI"><i></i>EASTWIKI</a></li>
+					<li class="ipp2020-link-8"><a href="http://202.127.204.49/zscq/index.html" target="_blank" title="科技论文"><i></i>科技论文</a></li>
+					<li class="ipp2020-link-10"><a href="http://samp.cas.cn/" target="_blank" title="仪器共享"><i></i>仪器共享</a></li>
+				</ul>
+			</div>
+		</div>
+	</div>
+
+	<div class="wx-col-b">
+		<div class="g-in clearfix">
+			<div class="fl clearfix">
+				<div class="ipp2020-zbmc">
+					<div class="hd">
+						<ul class="clearfix">
+							<li class="on"><a href="./ztbxx/zbxx/" title='采招信息'><i class="p15"></i>采招信息</a></li>
+							<li><a href="./xwdt/bmxx/" title='部门动态'><i class="p16"></i>部门动态</a></li>
+							<li><a href="./zhuanti/mtzz/" title='媒体追踪'><i class="p17"></i>媒体追踪</a></li>
+							<li><a href="./cxwh/zgcz/" title='创新文化'><i class="p18"></i>创新文化</a></li>
+						</ul>
+						<p class="more"><a href="./ztbxx/zbxx/" title='查看更多'>查看更多</a><a href="./xwdt/zhxw/" title='查看更多'>查看更多</a><a href="./zhuanti/mtzz/" title='查看更多'>查看更多</a><a href="./cxwh/zgcz/" title='查看更多'>查看更多</a></p>
+					</div>
+					<div class="bd">
+						<div class="mc">
+							<ul class="ipp2020-list-1">
+                                
+                                    <li><span>06-12</span><a href="./ztbxx/zbxx/202606/t20260612_841766.html" target="_blank">热处理炉辅助系统改造采购项目招标公告 </a></li>
+                                
+                                    <li><span>06-12</span><a href="./ztbxx/xjxx/202606/t20260612_841745.html" target="_blank">NBI束线系统维修询价公告 </a></li>
+                                
+                                    <li><span>06-12</span><a href="./ztbxx/xjxx/202606/t20260612_841744.html" target="_blank">仪表气系统采购询价公告 </a></li>
+                                
+                                    <li><span>06-11</span><a href="./ztbxx/xjxx/202606/t20260611_841506.html" target="_blank">低温真空绝热管路与安全阀管路相关设计制造采购询价公告 </a></li>
+                                
+                                    <li><span>06-11</span><a href="./ztbxx/xjxx/202606/t20260611_841504.html" target="_blank"> MCTB爆炸开关可靠性测试零部件询价公告 </a></li>
+                                
+                                    <li><span>06-11</span><a href="./ztbxx/zbxx/202606/t20260611_841493.html" target="_blank">电源测试平台供电系统安装服务项目招标公告 </a></li>
+                                
+							</ul>
+						</div>
+						<div class="mc">
+							<ul class="ipp2020-list-1">
+								
+									<li><span>06-10</span><a href="./xwdt/bmxx/202606/t20260610_841359.html" target="_blank">等离子体应用研究室召开学术交流培训会 </a></li>
+								
+									<li><span>06-03</span><a href="./xwdt/bmxx/202606/t20260603_840764.html" target="_blank">等离子体所聚变先进制造中心开展系列科普宣传活动 </a></li>
+								
+									<li><span>05-29</span><a href="./xwdt/bmxx/202605/t20260529_840099.html" target="_blank">十一室开展2026年部门安全教育培训会 </a></li>
+								
+									<li><span>05-18</span><a href="./xwdt/bmxx/202605/t20260518_838206.html" target="_blank">十三室开展AI Agent+Skills 赋能科研实验智能化培训 </a></li>
+								
+									<li><span>05-18</span><a href="./xwdt/bmxx/202605/t20260518_838157.html" target="_blank">技术中心开展智能运维技术交流研讨会 </a></li>
+								
+									<li><span>04-23</span><a href="./xwdt/bmxx/202604/t20260423_834697.html" target="_blank">技术中心召开2026年EAST第一轮实验技术支撑系统运行启动会 </a></li>
+								
+							</ul>
+						</div>
+						<div class="mc">
+							<ul class="ipp2020-list-1">
+								
+									<li><span>06-07</span><a href="https://szb.ahnews.com.cn/ahrb/layout/202606/07/node_02.html#c1140550" target="_blank">【安徽日报】“人造太阳”建设稳步推进 </a></li>
+								
+									<li><span>06-01</span><a href="https://item.btime.com/263vupd977h0enqfbfve74cnd6p" target="_blank">【北京卫视】第十个“全国科技工作者日” 黄连生：深耕核聚变领域 勇攀科技高峰 </a></li>
+								
+									<li><span>05-30</span><a href="https://news.cctv.com/2026/05/30/ARTIWCZaP8he5623OwotbCez260530.shtml" target="_blank">【新闻联播】【新思想引领新征程】矢志创新勇攀高峰 加快建设科技强国 </a></li>
+								
+									<li><span>05-29</span><a href="https://h.xinhuaxmt.com/vh512/share/13127136?docid=13127136&newstype=1001&d=13526b1&channel=weixin&time=1780101065005" target="_blank">【新华社】凡人微光｜不负每一份耕耘 </a></li>
+								
+									<li><span>05-29</span><a href="https://news.cnr.cn/dj/20260529/t20260529_527639605.shtml" target="_blank">【央广网】AI中国丨当神话照进现实！致敬中国科技工作者 </a></li>
+								
+									<li><span>05-26</span><a href="https://www.hf365.com/hfzx/system/2026/05/26/030067096.shtml" target="_blank">【合肥在线】ITER磁体冷测设施正式投运 等离子体所参与关键系统建设 </a></li>
+								
+							</ul>
+						</div>
+						<div class="mc">
+							<ul class="ipp2020-list-1">
+
+									<li><span>06-05</span><a href="https://mp.weixin.qq.com/s/ypLR1M5Z9j3offBejOB97A" target="_blank">【摄影作品】离场之前，定格之后 | 等离子体所2026届研究生毕业典礼现场图记 </a></li>
+								
+									<li><span>05-28</span><a href="https://www.kepuchina.cn/article/articleinfo?business_type=100&classify=0&ar_id=707088#comment" target="_blank">探秘公众科学日｜神奇的液氮：从纸杯白雾到托卡马克冷屏 </a></li>
+								
+									<li><span>05-28</span><a href="https://www.kepuchina.cn/article/articleinfo?business_type=100&classify=0&ar_id=707089#comment" target="_blank">探秘公众科学日｜无处不在的“空”：四个小实验，看见身边的无形力量 </a></li>
+								
+									<li><span>05-27</span><a href="https://www.kepuchina.cn/article/articleinfo?business_type=100&classify=0&ar_id=706688#comment" target="_blank">探秘公众科学日｜凌空不坠，翻转不掉——超导磁悬浮实验与“人造太阳”的强磁场密码 </a></li>
+								
+									<li><span>05-19</span><a href="https://mp.weixin.qq.com/s/Cr-RI6QDWLRvjIijAwwMag" target="_blank">【2026公众科学日摄影作品展】按下快门，收藏等离子体所的热闹与温柔 </a></li>
+								
+									<li><span>05-01</span><a href="https://mp.weixin.qq.com/s/Iu264MUcRe_CqiXbdzXmDA" target="_blank">【以劳动之笔 书聚变之光】ASIPP五一劳动节主题图片展 </a></li>
+								
+							</ul>
+						</div>
+					</div>
+				</div>
+			</div>
+			<div class="fr">
+				<div class="ipp2020-zbmc">
+					<div class="hd">
+						<ul class="clearfix">
+							<li class="on"><a href="./duoweishijiao/kejiyaowen/" title='院内要闻'><i class="p19"></i>院内要闻</a></li>
+							<li><a href="./duoweishijiao/jubiandongtai/" title='聚变在线'><i class="p20"></i>聚变在线</a></li>
+						</ul>
+						<p class="more"><a href="./duoweishijiao/kejiyaowen/" title='查看更多'>查看更多</a><a href="./duoweishijiao/jubiandongtai/" title='查看更多'>查看更多</a></p>
+					</div>
+					<div class="bd">
+						<div class="mc">
+							<ul class="ipp2020-list-1 ipp2020-list-300">
+								
+									<li><span>03-20</span><a href="https://www.cas.cn/yw/202303/t20230315_4880216.shtml" target="_blank">中科院党组传达学习习近平总书记重要讲... </a></li>
+								
+									<li><span>01-20</span><a href="https://www.cas.cn/yw/202301/t20230119_4872898.shtml" target="_blank">中科院党组召开2022年度民主生活会 </a></li>
+								
+									<li><span>01-09</span><a href="https://www.cas.cn/yw/202301/t20230106_4860113.shtml" target="_blank">中科院党组召开冬季扩大会议 </a></li>
+								
+							</ul>
+						</div>
+						<div class="mc">
+							<ul class="ipp2020-list-1 ipp2020-list-300">
+								
+									<li><span>04-26</span><a href="./duoweishijiao/jubiandongtai/201604/t20160426_353628.html" target="_blank">核聚变首次进入太平洋地区核能大会议题 </a></li>
+								
+									<li><span>09-30</span><a href="./duoweishijiao/jubiandongtai/201509/t20150930_351913.html" target="_blank">上海交大张杰获颁激光核变领域国际最高奖 </a></li>
+								
+									<li><span>09-09</span><a href="./duoweishijiao/jubiandongtai/201509/t20150909_351770.html" target="_blank">神秘公司突破反应堆极限 </a></li>
+								
+							</ul>
+						</div>
+					</div>
+				</div>
+				<ul class="ipp2020-jj clearfix">
+					
+						<li><a href="https://www.cas.cn/zt/hyzt/cas2026gzh/" target="_blank"><img id="pic_preview_box_id" src="./zhuanti/202406/W020260304343575920727_ORIGIN.jpg" width=244 height=101/></a></li>
+					
+						<li><a href="https://news.cctv.com/special/2026lianghui/index.shtml?spm=C96370.PPDB2vhvSivD.EQJ35yck0iFU.1" target="_blank"><img id="pic_preview_box_id" src="./zhuanti/202406/W020260303528827549984_ORIGIN.jpg" width=244 height=101/></a></li>
+					
+				</ul>
+			</div>
+			<script>jQuery(".ipp2020-zbmc").slide({ titCell:".hd li", mainCell:".bd",targetCell:".more a",delayTime:0});</script>
+		</div>
+	</div>
+</div>
+<div class="ipp2020-footer-link">
+	<div class="g-in">
+		<ul class="clearfix">
+			<li>
+				<select name="select1" id="select1" onChange="if(this.value!='')window.open(this.value,'_blank');void(0);"  >
+					<option>国家部委网站</option>
+					
+					<option value='http://www.caea.gov.cn' >原子能机构</option> 
+					
+					<option value='http://www.nsfc.gov.cn/' >自然科学基金会</option> 
+					
+					<option value='http://www.mof.gov.cn/' >财政部</option> 
+					
+					<option value='http://www.nsfc.gov.cn/Portal0/default124.htm' >基金委</option> 
+					
+					<option value='http://www.sdpc.gov.cn/' >发改委</option> 
+					
+					<option value='http://www.most.gov.cn/' >科技部</option> 
+					
+				</select >
+			</li>
+			<li>
+				<select onChange="if(this.selectedIndex!=0)window.open(this.options[this.selectedIndex].value,'','')" >
+					<option>中科院系统网站</option>
+					
+					<option value="http://www.cas.cn/">中国科学院</option> 
+					
+					<option value="http://www.cas.cn/zz">中科院院属机构</option> 
+					
+					<option value="http://www.ustc.edu.cn/zh_CN/">中国科技大学</option> 
+					
+					<option value="http://www.aiofm.cas.cn/">安光所</option> 
+					
+					<option value="http://www.hmfl.cas.cn/">强磁场</option> 
+					
+					<option value="http://www.issp.cas.cn/">固体所</option> 
+					
+					<option value="http://www.iim.cas.cn/">智能所</option> 
+					
+					<option value="http://www.inest.cas.cn/">核安全所</option> 
+					
+					<option value="http://www.hfiti.cn/">合肥创新院</option> 
+					
+					<option value="http://www.rntek.cas.cn/">应用技术所</option> 
+					
+					<option value="http://www.las.ac.cn/">中科院图书馆</option> 
+					
+				</select>
+			</li>
+			<li>
+				<select name="select3" id="select3" onChange="if(this.value!='')window.open(this.value,'_blank');void(0);" >
+					<option>高校网站</option>
+					
+						<option value='http://www.pku.edu.cn/' >北京大学</option> 
+					
+						<option value='http://www.tsinghua.edu.cn/qhdwzy/index.jsp' >清华大学</option> 
+					
+				</select>
+			</li>
+			<li>
+				<select name="select4" id="select4" onChange="if(this.value!='')window.open(this.value,'_blank');void(0);">
+					<option>新闻网站</option>
+					
+						<option value='http://gb.chinabroadcast.cn/' >中国国际广播电台</option> 
+					
+						<option value='http://www.cnr.cn/' >中国广播网</option> 
+					
+						<option value='http://www.ce.cn/' >经济日报</option> 
+					
+						<option value='http://www.cyol.net/' >中青报</option> 
+					
+						<option value='http://www.gmw.cn' >光明日报</option> 
+					
+						<option value='http://www.chinadaily.com.cn/gb/worldrep/index.html' >中国日报</option> 
+					
+						<option value='http://www.qstheory.cn/' >求是</option> 
+					
+						<option value='http://www.cctv.com/' >中央电视台</option> 
+					
+						<option value='http://www.xinhuanet.com/' >新华社</option> 
+					
+						<option value='http://www.people.com.cn/' >人民日报</option> 
+					
+						<option value='http://www.cstnet.net.cn/' >科技网</option> 
+					
+						<option value='http://www.sciencenet.cn/' >科学网</option> 
+					
+				</select>
+			</li>
+			<li>
+				<SELECT name="select6" id="select6" onchange="if(this.value!='')window.open(this.value,'_blank');void(0);" size="1"> 
+					<OPTION selected>门户网站</OPTION>
+					
+						<option value='http://www.gov.cn/' >中华人民共和国中央人民政府</option> 
+					
+						<option value='http://www.tom.com/' >tom.com</option> 
+					
+						<option value='http://www.163.com/' >网易</option> 
+					
+						<option value='http://www.ifeng.com/' >凤凰网</option> 
+					
+						<option value='http://www.sohu.com/' >搜狐网</option> 
+					
+						<option value='http://www.sina.com.cn/' >新浪网</option> 
+					
+				</SELECT>
+			</li>
+			<li>
+				<select name="select5" id="select5" onChange="if(this.value!='')window.open(this.value,'_blank');void(0);">
+					<option>其它常用网站</option>
+					
+					<option value='http://www.zycg.gov.cn/' >中央政府采购</option> 
+					
+					<option value='http://www.fmprc.gov.cn/' >外交部</option> 
+					
+					<option value='http://www.ipp.ac.cn/www/cxwh/jbdt/webinfo/2009/12/1259544670452527.htm' >聚变相关网站</option> 
+					
+					<option value='http://lib.hfcas.ac.cn/19' >合肥物质科学研究院图书馆</option> 
+					
+					<option value='http://www.nstl.gov.cn/' >国家科技图书文献中心</option> 
+					
+					<option value='http://www.iter.org/default.aspx' >ITER国际</option> 
+					
+					<option value='http://www.iterchina.cn/' >中国国际核聚变能源计划执行中心</option> 
+					
+					<option value='http://159.226.100.141/Union/' >全国期刊目录</option> 
+					
+					<option value='http://202.127.204.25/ic/ippdz.htm' >同行网站</option> 
+					
+					<option value='http://www.antivirus-china.org.cn/' >病毒处理中心</option> 
+					
+					<option value='http://www.ntsc.ac.cn/' >国家授时中心</option> 
+					
+				</select>
+			</li>
+		</ul>
+	</div>
+</div>
+<style>
+    .ipp2020-footer .fl,.ipp2020-ft-nav ul { width: 800px; }
+    </style>
+    <div class="ipp2020-footer">
+        <div class="g-in clearfix">
+            <div class="fl">
+                <div class="ipp2020-ft-nav">
+                    <ul class="clearfix">
+                        <li><a id="中国科学院" href="http://www.cas.cn/" target="_blank">中国科学院</a></li>
+                        <li><a id="中科院合肥研究院" href="http://www.hf.cas.cn/" target="_blank">中科院合肥研究院</a></li>
+                        <li><a id="EAST" href="http://east.ipp.ac.cn/" target="_blank">EAST</a></li>
+                        <li><a id="CRAFT外网" href="http://craft.ipp.ac.cn/index.aspx" target="_blank">CRAFT外网</a></li>
+                        <li><a id="CRAFT内网" href="http://craft.ipp.ac.cn/inner/login.aspx" target="_blank">CRAFT内网</a></li>
+                        <li><a id="合肥综合性国家科学中心能源研究院" href="http://ie.ah.cn/" target="_blank">合肥综合性国家科学中心能源研究院</a></li>
+                    </ul>
+                </div>
+                <div class="copyright">
+                    <p>版权所有：Copyright &copy; 2010-2023 中国科学院等离子体物理研究所
+                        <b class="siteIcon"><script type="text/javascript" src="//api.cas.cn/app/sitema/cas.sitema.min.js" id="sitema" unitcode="" domain="http://www.ipp.cas.cn/" siteid="277" sysid="7"></script> </b>
+                        <style>
+                            .siteIcon img{
+                                width: 32px;
+                                display: inline-block;
+                                margin-top: -32px;
+                                top: 14px;
+                                position: relative;
+                                margin-left: 6px;
+                            }
+                        </style>
+                    </p>
+                    <p><a href="http://beian.miit.gov.cn" target="_blank">皖ICP备05001008号-1</a></p>
+                </div>
+            </div>
+            <div class="fr">
+                <div class="qr fl">
+<img src="duoweishijiao/jubiandongtai/201604/W020250319399783913836_ORIGIN.jpg" alt="扫码加微信公众号" width="120" height="120" title="扫码加微信公众号" />
+
+                    <p>微信公众号</p>
+                </div>
+                <ul class="adr fr">
+                    <li class="adr-1">地址：中国安徽合肥蜀山湖路350号</li>
+                    <li class="adr-2">电话：+86-0551-65591307</li>
+                    <li class="adr-3">传真：+86-0551-65591310</li>
+                    <li class="adr-4">邮编：230031</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    </body>
+    </html>
+<script>
+$(document).ready(function() {
+    // 页面加载时，检查所有链接
+    $('.ipp2020-list-1 li a').each(function() {
+        // 检查链接是否已被访问
+        if ($(this).hasClass('visited')) {
+            $(this).find('img').hide();
+        }
+    });
+    
+    // 监听链接点击，标记为已访问
+    $('.ipp2020-list-1 li a').on("click", function(){
+        $(this).addClass('visited');
+        $(this).find('img').hide();
+        
+        // 可选：保存到 localStorage
+        var visitedLinks = JSON.parse(localStorage.getItem('visitedLinks') || '[]');
+        visitedLinks.push($(this).attr('href'));
+        localStorage.setItem('visitedLinks', JSON.stringify(visitedLinks));
+    });
+    
+    // 从 localStorage 恢复已访问标记
+    var visitedLinks = JSON.parse(localStorage.getItem('visitedLinks') || '[]');
+    $('.ipp2020-list-1 li a').each(function() {
+        var href = $(this).attr('href');
+        if (visitedLinks.indexOf(href) !== -1) {
+            $(this).addClass('visited');
+            $(this).find('img').hide();
+        }
+    });
+});
+<script>
