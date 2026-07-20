@@ -73,6 +73,25 @@
     [data-theme="dark"] .error { background: #2A0E10; color: #F07070; }
     [data-theme="dark"] .chan:hover { border-color: #3A5060; }
     [data-theme="dark"] a { color: var(--accent); }
+
+    /* ── Playground page dark overrides ─────────────────────────────────── */
+    [data-theme="dark"] form.pg label { color: #8FA0A8; }
+    [data-theme="dark"] form.pg input[type=text],
+    [data-theme="dark"] form.pg select { background: var(--card); color: var(--fg);
+                  border-color: var(--line); }
+    [data-theme="dark"] form.pg .filters { background: var(--card); border-color: var(--line); }
+    [data-theme="dark"] form.pg .saverow { border-top-color: var(--line); }
+    [data-theme="dark"] form.pg .saverow .sep { color: #8FA0A8; }
+    [data-theme="dark"] form.pg .typesel .inline { color: var(--fg); }
+    [data-theme="dark"] .ok { background: #0E3A2C; color: #2ED8A4; border-color: #2ED8A4; }
+    [data-theme="dark"] .pill.kept { background: #0E3A2C; color: #2ED8A4; }
+    [data-theme="dark"] .pill.drop { background: #3A0E10; color: #F07070; }
+    [data-theme="dark"] tr.dropped td { color: #5A6A70; }
+    [data-theme="dark"] tr.dropped td.t a { color: #5A6A70; }
+
+    /* ── About page dark overrides ──────────────────────────────────────── */
+    [data-theme="dark"] .badge.testing { background: #302800; color: #E8B830; }
+    [data-theme="dark"] .lede { color: var(--fg); }
     * { box-sizing: border-box; }
     html { -webkit-text-size-adjust: 100%; }
     body { margin: 0; background: var(--canvas); color: var(--fg);
