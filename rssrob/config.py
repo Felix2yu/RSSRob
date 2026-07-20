@@ -104,7 +104,9 @@ def _merge_dir(directory: Path) -> dict:
     for f in files:
         with open(f, encoding="utf-8") as fh:
             raw = yaml.safe_load(fh) or {}
-        if "name" in raw and "sites" not in raw:   # a single-site file
+        if isinstance(raw, list):                    # top-level list (sites.yaml)
+            raw = {"sites": raw}
+        elif "name" in raw and "sites" not in raw:   # a single-site file
             raw = {"sites": [raw]}
         for key, value in raw.items():
             if key == "sites":
