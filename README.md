@@ -102,6 +102,7 @@ services:
   rssrob:
     build: .
     container_name: rssrob
+    command: serve
     ports:
       - "8080:8080"
     volumes:
