@@ -5,3 +5,4 @@ feedgen
 pyyaml
 feedparser
 qrcode
+apprise

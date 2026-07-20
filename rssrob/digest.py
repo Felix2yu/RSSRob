@@ -1,4 +1,4 @@
-"""Build and send a digest email of a feed's items to its subscribers.
+"""Build and send a digest notification of a feed's items to its notification targets.
 
 Mirrors the web preview: each item shows date + full title (the item's link is
 followed for the full title) + a short description. The full article body is
@@ -10,12 +10,10 @@ establishes the baseline; later runs send only what's new, and send nothing
 when there are no new items. Use --all to ignore the state and resend
 everything; --dry-run previews without sending or recording state.
 
-    python -m rssrob.digest --site <name>              # send new items to subscribers
-    python -m rssrob.digest --site <name> --to me@x    # send to an override address
+    python -m rssrob.digest --site <name>              # send new items to targets
+    python -m rssrob.digest --site <name> --to tgram://...    # send to override target
     python -m rssrob.digest --site <name> --dry-run     # print, don't send/record
     python -m rssrob.digest --site <name> --all         # ignore state, resend all
-
-SMTP config comes from the environment / .env (see rssrob.notify).
 """
 
 import argparse
@@ -30,7 +28,7 @@ from .article import (DESC_LEN, fetch_article, shorten as _shorten,
                       text_from_html as _text_from_html)
 from .config import default_config_path, load_config
 from .fetch import Fetcher
-from .notify import EmailError, load_dotenv, send_email
+from .notify import NotifyError, send_notification
 from .pipeline import obtain_items
 from .subscribers import Subscribers
 
@@ -50,7 +48,7 @@ def _item_key(it):
 
 
 class SentStore:
-    """Track which item ids have already been emailed per feed (JSON file).
+    """Track which item ids have already been notified per feed (JSON file).
 
     Shape on disk: {"<feed-name>": ["id1", "id2", ...]}. Bounded to the most
     recent ids per feed to avoid unbounded growth."""
@@ -80,8 +78,6 @@ class SentStore:
         data = self._load()
         if subscriber is None:
             return set(data.get(feed, []))
-        # per-subscriber set, unioned with the legacy global set as a baseline so
-        # items already delivered before per-subscriber tracking count as seen.
         legacy = set(data.get(feed, []))
         per = data.get(self._SUBS_KEY, {}).get(subscriber, {}).get(feed, [])
         return legacy | set(per)
@@ -109,7 +105,7 @@ class SentStore:
 
 
 def select_new_items(items, feed, state):
-    """Return only items whose id has not already been emailed for `feed`."""
+    """Return only items whose id has not already been notified for `feed`."""
     seen = state.seen_ids(feed)
     return [it for it in items if _item_key(it) not in seen]
 
@@ -123,9 +119,9 @@ def enrich_items(site, items, fetcher) -> List[dict]:
     entries = []
     for it in items:
         title, description = it.title, None
-        if it.summary:                                   # rss: summary in the feed
+        if it.summary:
             description = _shorten(_text_from_html(it.summary))
-        elif it.link:                                    # html: follow the link
+        elif it.link:
             try:
                 art = fetch_article(it.link, fetcher, **kwargs)
                 title = art.title or it.title
@@ -138,16 +134,14 @@ def enrich_items(site, items, fetcher) -> List[dict]:
 
 
 def _render_section(title: str, entries: List[dict]) -> tuple:
-    """Render one feed's items as (text_block, html_block): a header plus a
-    dated title / short-description / link list. Shared by single and combined
-    digests so the markup stays identical."""
+    """Render one feed's items as (text_block, html_block)."""
     n = len(entries)
     plural = "" if n == 1 else "s"
 
-    text_lines = [f"{title} — {n} item{plural}", ""]
+    text_lines = [f"{title} — {n} 条更新", ""]
     for e in entries:
         date = (e["date"] or "").strip()
-        text_lines.append(f"{('['+date+'] ') if date else ''}{e['title'] or '(untitled)'}")
+        text_lines.append(f"{('['+date+'] ') if date else ''}{e['title'] or '(无标题)'}")
         if e["description"]:
             text_lines.append(f"  {e['description']}")
         if e["link"]:
@@ -158,7 +152,7 @@ def _render_section(title: str, entries: List[dict]) -> tuple:
     rows = []
     for e in entries:
         date = _html.escape((e["date"] or "").strip())
-        t = _html.escape(e["title"] or "(untitled)")
+        t = _html.escape(e["title"] or "(无标题)")
         link = _html.escape(e["link"] or "")
         head = (f'<a href="{link}" style="color:#0353a4;text-decoration:none">{t}</a>'
                 if link else t)
@@ -172,13 +166,13 @@ def _render_section(title: str, entries: List[dict]) -> tuple:
             '</tr>')
     html_block = (
         f'<h2 style="font-size:1.2rem;margin:0 0 .2rem">{_html.escape(title)}</h2>'
-        f'<p style="color:#666;margin:.1rem 0 .8rem">{n} update{plural}</p>'
+        f'<p style="color:#666;margin:.1rem 0 .8rem">{n} 条更新</p>'
         f'<table style="border-collapse:collapse;width:100%">{"".join(rows)}</table>')
     return text_block, html_block
 
 
 def _wrap_html(inner: str) -> str:
-    """Wrap one or more rendered section blocks in the email shell + footer."""
+    """Wrap one or more rendered section blocks in the notification shell + footer."""
     return (
         '<div style="max-width:680px;margin:0 auto;'
         'font-family:system-ui,-apple-system,Arial,sans-serif;color:#222">'
@@ -187,24 +181,22 @@ def _wrap_html(inner: str) -> str:
 
 
 def build_digest(title: str, entries: List[dict]) -> tuple:
-    """Return (subject, text_body, html_body) for ONE feed: date + full title +
-    short description."""
+    """Return (subject, text_body, html_body) for ONE feed."""
     n = len(entries)
     plural = "" if n == 1 else "s"
-    subject = f"[RSSRob] {title} — {n} update{plural}"
+    subject = f"[RSSRob] {title} — {n} 条更新"
     text_block, html_block = _render_section(title, entries)
     return subject, text_block, _wrap_html(html_block)
 
 
 def build_combined_digest(sections: List[dict]) -> tuple:
-    """Return (subject, text_body, html_body) for one combined email across
-    several feeds. `sections` is [{"title": str, "entries": [...]}, ...] for
-    feeds that have items. A single section delegates to the single-feed style."""
+    """Return (subject, text_body, html_body) for one combined notification
+    across several feeds."""
     if len(sections) == 1:
         return build_digest(sections[0]["title"], sections[0]["entries"])
     total = sum(len(s["entries"]) for s in sections)
     plural = "" if total == 1 else "s"
-    subject = f"[RSSRob] {total} update{plural} across {len(sections)} feeds"
+    subject = f"[RSSRob] {len(sections)} 个订阅源共 {total} 条更新"
     text_blocks, html_blocks = [], []
     for s in sections:
         tb, hb = _render_section(s["title"], s["entries"])
@@ -217,12 +209,7 @@ def send_feed_digest(site, recipients: List[str], limit: int = 10,
                      first_limit: int = 20, fetcher=None, dry_run: bool = False,
                      state=None, only_new: bool = True) -> dict:
     """Fetch a feed, follow links for full titles + short descriptions, and
-    email a single digest to all recipients (Bcc).
-
-    With a `state` and `only_new=True`, only items not previously sent are
-    included, and their ids are recorded after a successful send. The *first*
-    send for a feed (no prior state) backfills up to `first_limit` items;
-    later sends are capped at `limit`. `fetcher` is injectable for testing."""
+    send a notification to all recipients."""
     fetcher = fetcher or Fetcher(proxy=getattr(site, "proxy", None))
     items, feed_title, _ = obtain_items(site, fetcher)
     first_send = state is not None and not state.seen_ids(site.name)
@@ -232,7 +219,7 @@ def send_feed_digest(site, recipients: List[str], limit: int = 10,
     items = items[:cap]
     title = site.title or feed_title or site.name
 
-    if not items:                                    # nothing new to send
+    if not items:
         return {"subject": None, "items": 0, "recipients": recipients,
                 "sent": 0, "errors": [], "dry_run": dry_run, "no_new": True}
 
@@ -244,10 +231,9 @@ def send_feed_digest(site, recipients: List[str], limit: int = 10,
                 "items": len(entries), "recipients": recipients, "sent": 0,
                 "errors": [], "dry_run": True, "no_new": False}
 
-    # one email to everyone, Bcc so recipients don't see each other
     errors = []
     try:
-        send_email([], subject, text, html=html_body, bcc=recipients)
+        send_notification(recipients, subject, text, body_html=html_body)
         sent = len(recipients)
     except Exception as e:
         sent = 0
@@ -264,12 +250,10 @@ def send_subscriber_digest(subscriber, sites, *, limit: int = 10,
                            first_limit: int = 20, fetcher=None,
                            dry_run: bool = False, state=None,
                            only_new: bool = True) -> dict:
-    """Email one subscriber a single combined digest across all `sites` they
-    follow. Incremental state is tracked per subscriber (only items not sent to
-    THIS subscriber are included, then recorded after a successful send). A feed
-    that fails to fetch is skipped and reported; the others are still sent."""
+    """Send one notification target a combined digest across all `sites` they
+    follow. Incremental state is tracked per subscriber."""
     sections = []
-    to_mark = []                       # (feed_name, [item_keys]) to record on success
+    to_mark = []
     errors = []
     for site in sites:
         f = fetcher or Fetcher(proxy=getattr(site, "proxy", None))
@@ -304,7 +288,7 @@ def send_subscriber_digest(subscriber, sites, *, limit: int = 10,
                 "errors": errors, "dry_run": True, "no_new": False}
 
     try:
-        send_email([subscriber], subject, text, html=html_body)
+        send_notification([subscriber], subject, text, body_html=html_body)
     except Exception as e:
         return {"subject": subject, "feeds": len(sections), "items": total,
                 "sent": 0, "errors": errors + [("*", f"{type(e).__name__}: {e}")],
@@ -321,17 +305,17 @@ def send_subscriber_digest(subscriber, sites, *, limit: int = 10,
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(
         prog="rssrob.digest",
-        description="Email feed items to subscribers, one combined email per "
-                    "subscriber (--subscriber/--all-subscribers) or one email "
+        description="Send feed notifications to targets via Apprise, one combined "
+                    "notification per target (--subscriber/--all-subscribers) or one "
                     "per feed (--site, legacy).")
-    p.add_argument("--site", help="legacy: send ONE email per this feed to all its subscribers")
-    p.add_argument("--subscriber", metavar="EMAIL",
-                   help="send one combined digest to this subscriber across all their feeds")
+    p.add_argument("--site", help="legacy: send one notification per this feed to all its targets")
+    p.add_argument("--subscriber", metavar="URL",
+                   help="send one combined digest to this target across all their feeds")
     p.add_argument("--all-subscribers", action="store_true",
-                   help="send every subscriber one combined digest across their feeds")
+                   help="send every target one combined digest across their feeds")
     p.add_argument("--config", help="config file or dir (default: ./configs/ etc.)")
-    p.add_argument("--to", action="append", metavar="EMAIL",
-                   help="(--site only) override recipients (repeatable)")
+    p.add_argument("--to", action="append", metavar="URL",
+                   help="(--site only) override notification targets (repeatable)")
     p.add_argument("--subscribers", default="var/subscribers.json",
                    help="subscriber store path (default: var/subscribers.json)")
     p.add_argument("--limit", type=int, default=None,
@@ -344,7 +328,6 @@ def main(argv=None) -> int:
                    help="ignore state and (re)send all current items")
     p.add_argument("--dry-run", action="store_true",
                    help="print what would be sent, do not send or record state")
-    p.add_argument("--no-dotenv", action="store_true", help="don't load .env (use real env only)")
     args = p.parse_args(argv)
 
     if sum([bool(args.site), bool(args.subscriber), bool(args.all_subscribers)]) != 1:
@@ -357,16 +340,11 @@ def main(argv=None) -> int:
         print(f"config error: {e}", file=sys.stderr)
         return 2
 
-    if not args.dry_run and not args.no_dotenv:
-        load_dotenv()
-
-    # CLI flags override config's `digest:` block, which overrides built-in defaults.
     limit = args.limit if args.limit is not None else int(config.digest.get("limit", 10))
     first_limit = (args.first_limit if args.first_limit is not None
                    else int(config.digest.get("first_limit", 20)))
     state = SentStore(args.state)
 
-    # --- legacy per-feed broadcast ---
     if args.site:
         site = next((s for s in config.sites if s.name == args.site), None)
         if site is None:
@@ -374,14 +352,14 @@ def main(argv=None) -> int:
             return 2
         recipients = args.to or Subscribers(args.subscribers).list(site.name)
         if not recipients:
-            print(f"no subscribers for {site.name!r} (and no --to given)", file=sys.stderr)
+            print(f"no targets for {site.name!r} (and no --to given)", file=sys.stderr)
             return 1
         try:
             result = send_feed_digest(site, recipients, limit=limit,
                                       first_limit=first_limit, dry_run=args.dry_run,
                                       state=state, only_new=not args.all)
-        except EmailError as e:
-            print(f"email error: {e}", file=sys.stderr)
+        except NotifyError as e:
+            print(f"notification error: {e}", file=sys.stderr)
             return 2
         except Exception as e:
             print(f"failed: {type(e).__name__}: {e}", file=sys.stderr)
@@ -391,48 +369,47 @@ def main(argv=None) -> int:
             return 0
         if args.dry_run:
             print(f"[dry-run] subject: {result['subject']}")
-            print(f"[dry-run] {result['items']} new item(s) -> {len(recipients)} recipient(s): "
+            print(f"[dry-run] {result['items']} new item(s) -> {len(recipients)} target(s): "
                   f"{', '.join(recipients)}")
             return 0
         print(f"sent '{result['subject']}' ({result['items']} item(s)) to "
-              f"{result['sent']} recipient(s) in one email")
+              f"{result['sent']} target(s)")
         for r, err in result["errors"]:
             print(f"  FAILED {r}: {err}", file=sys.stderr)
         return 0 if not result["errors"] else 1
 
-    # --- combined per-subscriber send ---
-    by_email = Subscribers(args.subscribers).by_email()
+    by_target = Subscribers(args.subscribers).by_target()
     if args.subscriber:
-        email = args.subscriber.strip().lower()
-        if email not in by_email:
-            print(f"not a subscriber: {args.subscriber!r}", file=sys.stderr)
+        target = args.subscriber.strip()
+        if target not in by_target:
+            print(f"not a target: {args.subscriber!r}", file=sys.stderr)
             return 1
-        targets = {email: by_email[email]}
+        targets = {target: by_target[target]}
     else:
-        targets = by_email
+        targets = by_target
         if not targets:
-            print("no subscribers", file=sys.stderr)
+            print("no notification targets", file=sys.stderr)
             return 1
 
     failed = False
     sites_by_name = {s.name: s for s in config.sites}
-    for email, info in targets.items():
+    for target, info in targets.items():
         sites = [sites_by_name[f] for f in info["feeds"] if f in sites_by_name]
-        result = send_subscriber_digest(email, sites, limit=limit,
+        result = send_subscriber_digest(target, sites, limit=limit,
                                         first_limit=first_limit, dry_run=args.dry_run,
                                         state=state, only_new=not args.all)
         if result.get("no_new"):
-            print(f"{email}: no new items")
+            print(f"{target}: no new items")
         elif args.dry_run:
-            print(f"[dry-run] {email}: {result['items']} item(s) across "
+            print(f"[dry-run] {target}: {result['items']} item(s) across "
                   f"{result['feeds']} feed(s) — {result['subject']}")
         elif result.get("sent"):
-            print(f"{email}: sent {result['items']} item(s) across {result['feeds']} feed(s)")
+            print(f"{target}: sent {result['items']} item(s) across {result['feeds']} feed(s)")
         else:
             failed = True
-            print(f"{email}: send failed", file=sys.stderr)
+            print(f"{target}: send failed", file=sys.stderr)
         for name, msg in result.get("errors", []):
-            print(f"  {email} / {name}: {msg}", file=sys.stderr)
+            print(f"  {target} / {name}: {msg}", file=sys.stderr)
     return 0 if not failed else 1
 
 

@@ -1,15 +1,14 @@
-"""Email feed subscriptions + per-email digest frequency, in one JSON file.
+"""Notification targets (Apprise URLs) + per-target digest frequency, in one JSON file.
 
 Shape on disk:
     {
-      "feeds": {"<feed>": ["a@x.com", ...], ...},   # which emails follow which feeds
-      "frequencies": {"a@x.com": 24, ...}           # email-level digest cadence (hours)
+      "feeds": {"<feed>": ["tgram://123:ABC/chat_id", ...], ...},
+      "frequencies": {"tgram://123:ABC/chat_id": 24, ...}
     }
 
-The frequency is per *email* (one value used for all of that email's feeds), set
-on first subscribe and editable afterwards. Legacy shapes are still read: a
-top-level {feed: [emails]} or {feed: {email: hours}} map (frequencies derived,
-default 24). Kept out of git because it's user-submitted personal data.
+The frequency is per *notification target* (one value for all of that target's
+feeds), set on first subscribe and editable afterwards. Legacy email-based
+shapes are auto-migrated on load (emails become mailto:// URLs).
 """
 
 import json
@@ -18,13 +17,7 @@ import re
 import threading
 from typing import List, Tuple
 
-_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-
 DEFAULT_FREQ_HOURS = 24
-
-
-def is_valid_email(email: str) -> bool:
-    return bool(_EMAIL_RE.match((email or "").strip()))
 
 
 def normalize_hours(value, default: float = DEFAULT_FREQ_HOURS):
@@ -38,33 +31,64 @@ def normalize_hours(value, default: float = DEFAULT_FREQ_HOURS):
     return int(h) if float(h).is_integer() else h
 
 
+def _is_apprise_url(s: str) -> bool:
+    """Check if a string looks like an Apprise URL (scheme://...)."""
+    return bool(re.match(r"^[a-zA-Z][a-zA-Z0-9+\-.]+://", s or ""))
+
+
+def _migrate_email(email: str) -> str:
+    """Convert a legacy email address to a mailto:// Apprise URL."""
+    return f"mailto://{email}"
+
+
 class Subscribers:
     def __init__(self, path: str):
         self.path = path
         self._lock = threading.Lock()
 
     def _load(self) -> Tuple[dict, dict]:
-        """Return (feeds {feed: [emails]}, frequencies {email: hours})."""
+        """Return (feeds {feed: [urls]}, frequencies {url: hours})."""
         if not os.path.exists(self.path):
             return {}, {}
         with open(self.path, encoding="utf-8") as f:
-            raw = json.load(f) or {}
+            try:
+                raw = json.load(f) or {}
+            except (json.JSONDecodeError, ValueError):
+                raw = {}
 
-        if isinstance(raw.get("feeds"), dict):                  # current format
-            feeds = {fd: list(dict.fromkeys(es or []))
-                     for fd, es in raw["feeds"].items()}
-            freqs = {e: normalize_hours(h)
-                     for e, h in (raw.get("frequencies") or {}).items()}
+        if isinstance(raw.get("feeds"), dict):
+            feeds = {}
+            freqs = {}
+            for fd, urls in raw["feeds"].items():
+                migrated = []
+                for u in (urls or []):
+                    if _is_apprise_url(u):
+                        migrated.append(u)
+                    else:
+                        migrated.append(_migrate_email(u))
+                feeds[fd] = list(dict.fromkeys(migrated))
+
+            for key, h in (raw.get("frequencies") or {}).items():
+                if _is_apprise_url(key):
+                    freqs[key] = normalize_hours(h)
+                else:
+                    freqs[_migrate_email(key)] = normalize_hours(h)
             return feeds, freqs
 
-        feeds, freqs = {}, {}                                   # legacy top-level map
+        # legacy top-level map
+        feeds, freqs = {}, {}
         for feed, val in raw.items():
-            if isinstance(val, list):                           # {feed: [emails]}
-                feeds[feed] = list(dict.fromkeys(val))
-            elif isinstance(val, dict):                         # {feed: {email: hours}}
-                feeds[feed] = list(val.keys())
+            if isinstance(val, list):
+                feeds[feed] = list(dict.fromkeys(
+                    _migrate_email(v) if not _is_apprise_url(v) else v
+                    for v in val))
+            elif isinstance(val, dict):
+                feeds[feed] = list(dict.fromkeys(
+                    _migrate_email(k) if not _is_apprise_url(k) else k
+                    for k in val.keys()))
                 for e, h in val.items():
-                    freqs[e] = normalize_hours(h)
+                    url = _migrate_email(e) if not _is_apprise_url(e) else e
+                    freqs[url] = normalize_hours(h)
             else:
                 feeds[feed] = []
         return feeds, freqs
@@ -79,69 +103,74 @@ class Subscribers:
         os.replace(tmp, self.path)
 
     def list(self, feed: str) -> List[str]:
-        """Subscriber emails for a feed (the digest recipient list)."""
+        """Notification URLs for a feed."""
         feeds, _ = self._load()
         return list(feeds.get(feed, []))
 
-    def freq(self, email: str):
-        """The email's digest frequency in hours (default if unknown)."""
+    def freq(self, url: str):
+        """The target's digest frequency in hours (default if unknown)."""
         _, freqs = self._load()
-        return freqs.get((email or "").strip().lower(), DEFAULT_FREQ_HOURS)
+        return freqs.get((url or "").strip(), DEFAULT_FREQ_HOURS)
 
     def items(self, feed: str) -> dict:
-        """{email: hours} for a feed, hours being each email's frequency."""
+        """{url: hours} for a feed."""
         feeds, freqs = self._load()
-        return {e: freqs.get(e, DEFAULT_FREQ_HOURS) for e in feeds.get(feed, [])}
+        return {u: freqs.get(u, DEFAULT_FREQ_HOURS) for u in feeds.get(feed, [])}
 
     def by_email(self) -> dict:
-        """{email: {"feeds": [feeds...], "hours": N}}, sorted."""
+        """Legacy alias: {url: {"feeds": [...], "hours": N}}, sorted."""
+        return self.by_target()
+
+    def by_target(self) -> dict:
+        """{url: {"feeds": [feeds...], "hours": N}}, sorted."""
         feeds, freqs = self._load()
         out: dict = {}
-        for feed, emails in feeds.items():
-            for e in emails:
-                out.setdefault(e, []).append(feed)
-        return {e: {"feeds": sorted(out[e]),
-                    "hours": freqs.get(e, DEFAULT_FREQ_HOURS)}
-                for e in sorted(out)}
+        for feed, urls in feeds.items():
+            for u in urls:
+                out.setdefault(u, []).append(feed)
+        return {u: {"feeds": sorted(out[u]),
+                     "hours": freqs.get(u, DEFAULT_FREQ_HOURS)}
+                for u in sorted(out)}
 
-    def add(self, feed: str, email: str, hours=DEFAULT_FREQ_HOURS) -> str:
-        """Subscribe an email to a feed. The email's frequency is set on the
-        first subscribe only (change it later via set_freq). Returns 'added',
+    def add(self, feed: str, url: str, hours=DEFAULT_FREQ_HOURS) -> str:
+        """Subscribe a notification target to a feed. Returns 'added',
         'exists', or 'invalid'."""
-        email = (email or "").strip().lower()
-        if not is_valid_email(email):
+        url = (url or "").strip()
+        if not url:
+            return "invalid"
+        if not _is_apprise_url(url):
             return "invalid"
         with self._lock:
             feeds, freqs = self._load()
             lst = feeds.setdefault(feed, [])
-            existed = email in lst
+            existed = url in lst
             if not existed:
-                lst.append(email)
-            if email not in freqs:                  # email-level: set once
-                freqs[email] = normalize_hours(hours)
+                lst.append(url)
+            if url not in freqs:
+                freqs[url] = normalize_hours(hours)
             self._save(feeds, freqs)
         return "exists" if existed else "added"
 
-    def set_freq(self, email: str, hours) -> bool:
-        """Update an existing subscriber's email-level frequency."""
-        email = (email or "").strip().lower()
+    def set_freq(self, url: str, hours) -> bool:
+        """Update an existing target's frequency."""
+        url = (url or "").strip()
         with self._lock:
             feeds, freqs = self._load()
-            if not any(email in es for es in feeds.values()):
+            if not any(url in us for us in feeds.values()):
                 return False
-            freqs[email] = normalize_hours(hours)
+            freqs[url] = normalize_hours(hours)
             self._save(feeds, freqs)
         return True
 
-    def remove(self, feed: str, email: str) -> bool:
-        email = (email or "").strip().lower()
+    def remove(self, feed: str, url: str) -> bool:
+        url = (url or "").strip()
         with self._lock:
             feeds, freqs = self._load()
             lst = feeds.get(feed, [])
-            if email not in lst:
+            if url not in lst:
                 return False
-            lst.remove(email)
-            if not any(email in es for es in feeds.values()):
-                freqs.pop(email, None)              # forget freq when fully unsubscribed
+            lst.remove(url)
+            if not any(url in us for us in feeds.values()):
+                freqs.pop(url, None)
             self._save(feeds, freqs)
         return True

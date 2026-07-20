@@ -1,16 +1,16 @@
 {% extends "base.html" %}
-{% block title %}邮件订阅 · RSSRob{% endblock %}
+{% block title %}通知管理 · RSSRob{% endblock %}
 {% block content %}
 
-  <h1 style="margin:.2rem 0 .1rem; font-size:1.25rem;">邮件订阅</h1>
-  <p class="count">{{ by_email|length }} 个邮箱 ·
-     摘要频率按邮箱设置（适用于其所有订阅源）</p>
+  <h1 style="margin:.2rem 0 .1rem; font-size:1.25rem;">通知管理</h1>
+  <p class="count">{{ by_target|length }} 个通知目标 ·
+     摘要频率按目标设置（适用于其所有订阅源）</p>
 
   {% if updated %}
     <div class="ok-banner">✓ 已更新 <strong>{{ updated }}</strong> 的频率。</div>
   {% endif %}
   {% if added %}
-    <div class="ok-banner">✓ 已订阅 <strong>{{ added }}</strong>。</div>
+    <div class="ok-banner">✓ 已添加 <strong>{{ added }}</strong>。</div>
   {% endif %}
   {% if add_error %}
     <div class="notice">{{ add_error }}</div>
@@ -30,8 +30,9 @@
 
   {% if sites %}
   <form class="add-sub" method="post" action="{{ url_for('add_feed') }}">
-    <strong>添加订阅者：</strong>
-    <input type="email" name="email" placeholder="you@example.com" required>
+    <strong>添加通知目标：</strong>
+    <input type="text" name="notify_url" placeholder="tgram://bot_token/chat_id 或 mailto://user:pass@smtp" required
+           style="flex:2; min-width:300px;">
     <span>订阅</span>
     <select name="site" required>
       <option value="" disabled selected>选择订阅源…</option>
@@ -44,16 +45,16 @@
   </form>
   {% endif %}
 
-  {% if by_email %}
+  {% if by_target %}
   <table>
-    <thead><tr><th>邮箱</th><th>频率（小时）</th><th>已订阅的源</th><th></th></tr></thead>
+    <thead><tr><th>通知目标</th><th>频率（小时）</th><th>已订阅的源</th><th></th></tr></thead>
     <tbody>
-      {% for email, info in by_email.items() %}
+      {% for target, info in by_target.items() %}
       <tr>
-        <td style="white-space:nowrap"><strong>{{ email }}</strong></td>
+        <td style="white-space:nowrap"><strong>{{ target }}</strong></td>
         <td>
           <form method="post" action="{{ url_for('set_frequency') }}" class="freq-form">
-            <input type="hidden" name="email" value="{{ email }}">
+            <input type="hidden" name="notify_url" value="{{ target }}">
             <input type="number" name="hours" value="{{ info.hours }}" min="1" step="1">
             <button type="submit">更新</button>
           </form>
@@ -61,31 +62,31 @@
         <td>
           {% for feed in info.feeds %}
             <span class="feed-chip">
-              <a href="{{ url_for('index', site=feed, show_subs=1) }}">{{ feed }}</a>
+              <a href="{{ url_for('playground', site=feed, edit='1') }}">{{ feed }}</a>
               <form method="post" action="{{ url_for('unsubscribe') }}" style="display:inline">
                 <input type="hidden" name="site" value="{{ feed }}">
-                <input type="hidden" name="email" value="{{ email }}">
-                <button type="submit" title="unsubscribe {{ email }} from {{ feed }}">×</button>
+                <input type="hidden" name="notify_url" value="{{ target }}">
+                <button type="submit" title="取消订阅 {{ target }} from {{ feed }}">×</button>
               </form>
             </span>
           {% endfor %}
           {% set available = sites | rejectattr('name', 'in', info.feeds) | list %}
           {% if available %}
             <form method="post" action="{{ url_for('add_feed') }}" class="add-feed">
-              <input type="hidden" name="email" value="{{ email }}">
+              <input type="hidden" name="notify_url" value="{{ target }}">
               <select name="site">
-                {% for s in available %}<option value="{{ s.name }}">{{ s.name }}</option>{% endfor %}
+                {% for s in available %}<option value="{{ s.name }}">{{ s.description or s.name }}</option>{% endfor %}
               </select>
-              <button type="submit" title="订阅 {{ email }} 到此源">+ 添加</button>
+              <button type="submit" title="添加 {{ target }} 到此订阅源">+ 添加</button>
             </form>
           {% endif %}
         </td>
         <td>
           <form method="post" action="{{ url_for('send_now') }}"
-                onsubmit="return confirm('立即向 {{ email }} 发送其订阅源的新条目？')">
-            <input type="hidden" name="email" value="{{ email }}">
+                onsubmit="return confirm('立即向 {{ target }} 发送其订阅源的新条目？')">
+            <input type="hidden" name="notify_url" value="{{ target }}">
             <button type="submit" class="send-now"
-                    title="立即向 {{ email }} 发送新条目">立即发送</button>
+                    title="立即向 {{ target }} 发送新条目">立即发送</button>
           </form>
         </td>
       </tr>
@@ -93,8 +94,8 @@
     </tbody>
   </table>
   {% else %}
-    <div class="notice">暂无订阅者。读者可从订阅源的
-      <a href="{{ url_for('index') }}">预览页面</a>订阅。</div>
+    <div class="notice">暂无通知目标。读者可从订阅源的
+      <a href="{{ url_for('playground') }}">数据源页面</a>添加。</div>
   {% endif %}
 
   <style>
@@ -113,7 +114,7 @@
     form.add-sub { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap;
       background:var(--bg); border:1px solid var(--line); border-radius:10px;
       padding:.6rem .9rem; margin:1rem 0; font-size:.9rem; }
-    form.add-sub input[type=email] { flex:1; min-width:180px; padding:.4rem .55rem;
+    form.add-sub input[type=text] { flex:2; min-width:300px; padding:.4rem .55rem;
       border:1px solid var(--line); border-radius:7px; font-size:.9rem; }
     form.add-sub input[type=number] { width:3.6rem; padding:.4rem; text-align:right;
       border:1px solid var(--line); border-radius:7px; }

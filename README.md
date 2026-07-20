@@ -402,8 +402,8 @@ RSSRob/
 └── var/                      # runtime state (gitignored) — created on first run
     ├── feeds/                # generated <name>.xml, served by the HTTP server
     ├── rssrob.db             # SQLite item history + dedup state
-    ├── subscribers.json      # per-feed email subscribers
-    ├── digest_state.json     # "already emailed" item ids (incremental digests)
+    ├── subscribers.json      # per-feed notification targets (Apprise URLs)
+    ├── digest_state.json     # "already notified" item ids (incremental digests)
     ├── wechat_credential.json # 公众号 session cookie + token (personal secret)
     └── twitter_credential.json # X session cookie (auth_token + ct0; personal secret)
 ```
@@ -429,37 +429,35 @@ python web/webapp.py                       # open http://127.0.0.1:5000/
 python web/webapp.py --proxy-port 7890     # default proxy for feeds that need one
 ```
 
-- `/` — feed preview (full titles + descriptions, follows article links). Each feed has a **subscribe** form so readers can sign up for email updates.
+- `/` — feed preview (full titles + descriptions, follows article links). Each feed has a **subscribe** form so readers can add notification targets.
 - `/playground` — live **selector & filter playground** for HTML *and* RSS sources; **Save** writes a tested site (selectors, `filter`, `proxy`) as one file per feed into `configs/` (or `config.yaml` in single-file mode).
 - `/wechat/login` — log in to your 公众号 backend and search/add 公众号 feeds.
 - `/twitter/login` — paste your x.com cookie and add X accounts as feeds.
-- `/backup` — **backup / restore**: download your config + all runtime state under `var/` (SQLite history, feeds, subscribers, digest state, 公众号 credential) as one `.zip`, and restore it on another instance or after a reinstall. The zip holds secrets — keep it private, and restart `rssrob serve` after restoring.
+- `/backup` — **backup / restore**: download your config + all runtime state under `var/` (SQLite history, feeds, notification targets, digest state, 公众号 credential) as one `.zip`, and restore it on another instance or after a reinstall. The zip holds secrets — keep it private, and restart `rssrob serve` after restoring.
 
 ---
 
-## Email notifications
+## Notifications (Apprise)
 
-Readers subscribe to a feed via the **subscribe** form on its preview page; addresses are stored in `var/subscribers.json` (gitignored — never committed).
+Readers subscribe to a feed via the **subscribe** form on its preview page by providing an Apprise notification URL; targets are stored in `var/subscribers.json` (gitignored — never committed).
 
-Sending uses SMTP, configured through **environment variables** so secrets stay out of git:
+RSSRob uses [Apprise](https://github.com/caronc/apprise) to send notifications across 100+ services. Supported notification URL formats include:
 
-| Variable | Example | Notes |
-|----------|---------|-------|
-| `RSSROB_SMTP_HOST` | `smtp.gmail.com` | required |
-| `RSSROB_SMTP_PORT` | `587` | default `587` |
-| `RSSROB_SMTP_USER` | `you@gmail.com` | username for auth |
-| `RSSROB_SMTP_PASSWORD` | *app password* | Gmail needs an [App Password](https://myaccount.google.com/apppasswords), not your account password |
-| `RSSROB_SMTP_FROM` | `you@gmail.com` | optional, defaults to `USER` |
-| `RSSROB_SMTP_STARTTLS` / `RSSROB_SMTP_SSL` | `true` | STARTTLS (587) or implicit TLS (465) |
+| Service | URL Format | Example |
+|---------|-----------|---------|
+| Telegram | `tgram://bot_token/chat_id` | `tgram://123456:ABC-DEF/123456789` |
+| Discord | `discord://webhook_id/token` | `discord://123456/ABCdef...` |
+| Slack | `slack://token/a/b/c` | `slack://T0000/B0000/xxx` |
+| Email | `mailto://user:pass@smtp_host` | `mailto://you@gmail.com:app_pass@smtp.gmail.com` |
+| Gotify | `gotify://host/token` | `gotify://gotify.example.com/AaBbCc` |
+| Pushover | `pover://user_key/token` | `pover://uQiRzcho4Renci6rM2-3d...` |
 
-For local testing, copy the template and fill it in — the `.env` file is gitignored:
+Configure notification targets in the Web UI at `/notifications` or via CLI:
 
 ```bash
-cp .env.example .env        # then edit .env and paste your app password
-python -m rssrob.notify --to you@gmail.com --subject "RSSRob test" --body "hello"
+python -m rssrob.digest --all-subscribers --dry-run   # preview all targets
+python -m rssrob.digest --site <name> --dry-run       # preview one feed
 ```
-
-`rssrob.notify` auto-loads `.env` for convenience (pass `--no-dotenv` to skip it); **real environment variables always take precedence**, so in production just export the `RSSROB_SMTP_*` vars and skip the file.
 
 ---
 

@@ -40,37 +40,38 @@
 
   <form class="subscribe" method="post" action="{{ url_for('subscribe') }}">
     <input type="hidden" name="site" value="{{ site.name }}">
-    <span class="sub-label">📧 订阅邮件更新：</span>
-    <input type="email" name="email" placeholder="you@example.com" required>
+    <span class="sub-label">📡 添加通知目标：</span>
+    <input type="text" name="notify_url" placeholder="tgram://bot_token/chat_id" required
+           style="flex:2; min-width:280px;">
     <span class="freq">每 <input type="number" name="hours" value="24" min="1" step="1"> 小时</span>
     <button type="submit">订阅</button>
     {% if subscriber_count %}
       <a class="sub-count" href="{{ url_for('index', site=site.name, show_subs=1) }}">
-        {{ subscriber_count }} 人已订阅</a>
+        {{ subscriber_count }} 个通知目标</a>
     {% endif %}
   </form>
 
   {% if show_subs %}
     <div class="sub-list">
       <div class="sub-list-head">
-        <strong>{{ site.description or site.title or site.name }}</strong> 的订阅者 ({{ subscriber_count }})
+        <strong>{{ site.description or site.title or site.name }}</strong> 的通知目标 ({{ subscriber_count }})
         <a href="{{ url_for('index', site=site.name) }}">收起</a>
       </div>
       {% if subscribers %}
         <ul>
-          {% for e, hours in subscribers.items() %}
+          {% for url, hours in subscribers.items() %}
             <li>
-              <span>{{ e }} <span class="freq-tag">每 {{ hours }} 小时</span></span>
+              <span>{{ url }} <span class="freq-tag">每 {{ hours }} 小时</span></span>
               <form method="post" action="{{ url_for('unsubscribe') }}">
                 <input type="hidden" name="site" value="{{ site.name }}">
-                <input type="hidden" name="email" value="{{ e }}">
+                <input type="hidden" name="notify_url" value="{{ url }}">
                 <button type="submit" title="取消订阅">取消订阅</button>
               </form>
             </li>
           {% endfor %}
         </ul>
       {% else %}
-        <div class="empty">暂无订阅者。</div>
+        <div class="empty">暂无通知目标。</div>
       {% endif %}
     </div>
   {% endif %}

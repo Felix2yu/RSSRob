@@ -48,7 +48,7 @@ from rssrob.digest import SentStore, send_subscriber_digest
 from rssrob.filters import apply_filter, parse_terms
 from rssrob.extract import extract_items
 from rssrob import admin_credential
-from rssrob.notify import load_dotenv
+from rssrob.notify import send_notification
 from rssrob.fetch import Fetcher
 from rssrob.pipeline import obtain_items, run_cycle
 from rssrob.rss import parse_feed
@@ -112,7 +112,7 @@ _ITEM_CACHE: dict = {}         # url -> (full_title, description) cached across 
 # --proxy / --proxy-port on the CLI (see __main__) for the global default.
 PROXY_URL = os.environ.get("RSSROB_PROXY") or None
 
-# Per-feed email subscriber list (gitignored; the notify job sends to these).
+# Per-feed notification target list (gitignored).
 SUBS = Subscribers(str(REPO_ROOT / "var" / "subscribers.json"))
 
 
@@ -543,48 +543,48 @@ def enrich_items():
 
 @app.route("/subscribe", methods=["POST"])
 def subscribe():
-    """Add an email to a feed's subscriber list (for email update notifications)."""
+    """Add a notification target to a feed's subscriber list."""
     site = (request.form.get("site") or "").strip()
-    email = (request.form.get("email") or "").strip()
+    notify_url = (request.form.get("notify_url") or "").strip()
     if not site:
         abort(400, description="missing feed")
     hours = request.form.get("hours") or 24
-    status = SUBS.add(site, email, hours)
+    status = SUBS.add(site, notify_url, hours)
     if status == "added":
-        return redirect(url_for("index", site=site, subscribed=email, show_subs=1))
-    msg = "already subscribed" if status == "exists" else "please enter a valid email address"
+        return redirect(url_for("index", site=site, subscribed=notify_url, show_subs=1))
+    msg = "已存在" if status == "exists" else "请输入有效的通知地址（如 tgram://bot_token/chat_id）"
     return redirect(url_for("index", site=site, sub_error=msg, show_subs=1))
 
 
 @app.route("/unsubscribe", methods=["POST"])
 def unsubscribe():
-    """Remove an email from a feed's subscriber list."""
+    """Remove a notification target from a feed's subscriber list."""
     site = (request.form.get("site") or "").strip()
-    email = (request.form.get("email") or "").strip()
+    notify_url = (request.form.get("notify_url") or "").strip()
     if not site:
         abort(400, description="missing feed")
-    SUBS.remove(site, email)
+    SUBS.remove(site, notify_url)
     return redirect(url_for("index", site=site, show_subs=1))
 
 
 @app.route("/set-frequency", methods=["POST"])
 def set_frequency():
-    """Update an email's digest frequency (hours), email-level."""
-    email = (request.form.get("email") or "").strip()
+    """Update a target's digest frequency (hours)."""
+    notify_url = (request.form.get("notify_url") or "").strip()
     hours = request.form.get("hours") or 24
-    SUBS.set_freq(email, hours)
-    return redirect(url_for("email_list", updated=email))
+    SUBS.set_freq(notify_url, hours)
+    return redirect(url_for("notify_list", updated=notify_url))
 
 
-@app.route("/subscribers")
-def email_list():
-    """List every subscriber email and which feeds it's subscribed to."""
+@app.route("/notifications")
+def notify_list():
+    """List every notification target and which feeds it's subscribed to."""
     try:
         sites = load_config(_config_path()).sites
     except Exception:
         sites = []
-    return render_template("subscribers.html", sites=sites, active=None,
-                           by_email=SUBS.by_email(),
+    return render_template("notifications.html", sites=sites, active=None,
+                           by_target=SUBS.by_target(),
                            updated=request.args.get("updated"),
                            added=request.args.get("added"),
                            add_error=request.args.get("add_error"),
@@ -596,51 +596,49 @@ def email_list():
 
 @app.route("/send-now", methods=["POST"])
 def send_now():
-    """Email one subscriber a single combined digest of the new items across
-    every feed they follow, now. Incremental per-subscriber state is recorded so
-    repeat clicks only send genuinely new items, independently per subscriber."""
-    email = (request.form.get("email") or "").strip().lower()
-    info = SUBS.by_email().get(email)
+    """Send one notification target a combined digest of new items across all
+    their feeds, now."""
+    notify_url = (request.form.get("notify_url") or "").strip()
+    info = SUBS.by_target().get(notify_url)
     if not info:
-        return redirect(url_for("email_list",
-                                send_error=f"{email or 'that address'} is not a subscriber"))
+        return redirect(url_for("notify_list",
+                                send_error=f"{notify_url or 'that target'} 不是通知目标"))
     try:
         config = load_config(_config_path())
     except Exception as e:
-        return redirect(url_for("email_list", send_error=f"config error: {e}"))
+        return redirect(url_for("notify_list", send_error=f"配置错误: {e}"))
 
     sites_by_name = {s.name: s for s in config.sites}
     sites = [sites_by_name[f] for f in info["feeds"] if f in sites_by_name]
     limit = int(config.digest.get("limit", 10))
     first_limit = int(config.digest.get("first_limit", 20))
     state = SentStore(str(REPO_ROOT / "var" / "digest_state.json"))
-    load_dotenv()                      # SMTP config from .env (real env still wins)
 
-    result = send_subscriber_digest(email, sites, limit=limit,
+    result = send_subscriber_digest(notify_url, sites, limit=limit,
                                     first_limit=first_limit, state=state, only_new=True)
 
     if result.get("errors"):
         msgs = "; ".join(f"{name}: {msg}" for name, msg in result["errors"][:3])
-        return redirect(url_for("email_list",
-                                send_error=f"sending to {email} failed — {msgs}"))
+        return redirect(url_for("notify_list",
+                                send_error=f"发送到 {notify_url} 失败 — {msgs}"))
     if result.get("no_new"):
-        return redirect(url_for("email_list", sent=email, sent_items=0))
-    return redirect(url_for("email_list", sent=email,
+        return redirect(url_for("notify_list", sent=notify_url, sent_items=0))
+    return redirect(url_for("notify_list", sent=notify_url,
                             sent_items=result["items"], sent_feeds=result["feeds"]))
 
 
 @app.route("/add-feed", methods=["POST"])
 def add_feed():
-    """Subscribe an email to a feed from the subscribers page."""
-    email = (request.form.get("email") or "").strip()
+    """Subscribe a notification target to a feed from the notifications page."""
+    notify_url = (request.form.get("notify_url") or "").strip()
     site = (request.form.get("site") or "").strip()
     hours = request.form.get("hours") or 24
     if not site:
-        return redirect(url_for("email_list", add_error="choose a feed to add"))
-    status = SUBS.add(site, email, hours)
+        return redirect(url_for("notify_list", add_error="请选择要添加的订阅源"))
+    status = SUBS.add(site, notify_url, hours)
     if status == "invalid":
-        return redirect(url_for("email_list", add_error="enter a valid email address"))
-    return redirect(url_for("email_list", added=email))
+        return redirect(url_for("notify_list", add_error="请输入有效的通知地址"))
+    return redirect(url_for("notify_list", added=notify_url))
 
 
 @app.route("/playground")
