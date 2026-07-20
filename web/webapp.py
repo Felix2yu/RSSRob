@@ -50,7 +50,7 @@ from rssrob.extract import extract_items
 from rssrob import admin_credential
 from rssrob.notify import load_dotenv
 from rssrob.fetch import Fetcher
-from rssrob.pipeline import obtain_items
+from rssrob.pipeline import obtain_items, run_cycle
 from rssrob.rss import parse_feed
 from rssrob.scheduler import Scheduler, build_twitter_client, build_wechat_client
 from rssrob.store import Store
@@ -477,6 +477,33 @@ def serve_feed(name):
     if not xml_file.is_file():
         abort(404, description=f"feed not found: {name}")
     return send_file(xml_file, mimetype="application/rss+xml; charset=utf-8")
+
+
+@app.route("/run-now/<name>", methods=["POST"])
+def run_now(name):
+    """Manually trigger a scrape of one feed."""
+    import threading
+    try:
+        config = load_config(_config_path())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    site = next((s for s in config.sites if s.name == name), None)
+    if site is None:
+        return jsonify({"error": f"no such site: {name}"}), 404
+    output_dir = config.output_dir
+    if not Path(output_dir).is_absolute():
+        output_dir = str(REPO_ROOT / output_dir)
+    store = Store(config.state_db)
+    fetcher = FallbackFetcher(FALLBACK_FILES, proxy=site.proxy)
+
+    def _scrape():
+        try:
+            run_cycle(site, store, fetcher, output_dir)
+        except Exception as e:
+            print(f"[run-now] {name} failed: {e}", file=sys.stderr)
+
+    threading.Thread(target=_scrape, daemon=True).start()
+    return jsonify({"status": "started", "site": name})
 
 
 @app.route("/enrich", methods=["POST"])
