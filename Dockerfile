@@ -10,7 +10,7 @@ COPY web/ web/
 COPY config.example.yaml ./
 
 RUN groupadd -g 1000 rssrob \
-    && useradd -r -u 1000 -g rssrob -s /sbin/nologin rssrob \
+    && useradd -r -u 1000 -g rssrob -d /app -s /sbin/nologin rssrob \
     && mkdir -p configs var/feeds \
     && chown -R rssrob:rssrob /app
 
