@@ -715,7 +715,7 @@ def _load_existing_site(save_path, name):
     one file per feed (falls back to scanning all yaml files). Single-file: the
     entry in ``sites``."""
     if os.path.isdir(save_path):
-        files = [Path(save_path) / (re.sub(r"[^A-Za-z0-9._-]", "-", name) + ".yaml")]
+        files = [Path(save_path) / (re.sub(r"[^\w.-]", "-", name) + ".yaml")]
         files += list(Path(save_path).glob("*.yaml")) + list(Path(save_path).glob("*.yml"))
         seen = set()
         for fp in files:
@@ -819,7 +819,7 @@ def save():
     try:
         if os.path.isdir(path):
             # folder mode: one file per feed (config/<name>.yaml)
-            fname = re.sub(r"[^A-Za-z0-9._-]", "-", name) + ".yaml"
+            fname = re.sub(r"[^\w.-]", "-", name) + ".yaml"
             with open(os.path.join(path, fname), "w", encoding="utf-8") as f:
                 yaml.safe_dump(site, f, allow_unicode=True, sort_keys=False)
         else:
@@ -897,7 +897,7 @@ def _write_site(site):
     name = site["name"]
     path = _save_path()
     if os.path.isdir(path):
-        fname = re.sub(r"[^A-Za-z0-9._-]", "-", name) + ".yaml"
+        fname = re.sub(r"[^\w.-]", "-", name) + ".yaml"
         out = os.path.join(path, fname)
         with open(out, "w", encoding="utf-8") as f:
             yaml.safe_dump(site, f, allow_unicode=True, sort_keys=False)
