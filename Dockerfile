@@ -9,6 +9,12 @@ COPY rssrob/ rssrob/
 COPY web/ web/
 COPY config.example.yaml ./
 
-EXPOSE 5000
+RUN useradd -r -s /sbin/nologin rssrob \
+    && mkdir -p configs var/feeds \
+    && chown -R rssrob:rssrob /app
+
+USER rssrob
+
+EXPOSE 8080
 
 ENTRYPOINT ["python", "-m", "rssrob"]
