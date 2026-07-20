@@ -996,8 +996,15 @@ def _write_site(site):
     path = _save_path()
     sites_yaml = _sites_yaml_path()
     if sites_yaml:
-        raw = _load_raw(sites_yaml) or {}
-        sites = raw.setdefault("sites", [])
+        raw = _load_raw(sites_yaml)
+        # sites.yaml may be a top-level list or a dict with "sites" key
+        if isinstance(raw, list):
+            sites = raw
+        elif isinstance(raw, dict):
+            sites = raw.setdefault("sites", [])
+        else:
+            sites = []
+            raw = sites
         for i, s in enumerate(sites):
             if s.get("name") == name:
                 sites[i] = site
