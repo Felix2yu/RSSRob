@@ -164,6 +164,21 @@ _boot_cred = _load_admin()
 app.secret_key = _boot_cred.secret_key if _boot_cred else os.urandom(32)
 
 
+def _start_scheduler():
+    """Start the background feed scraper so XML files get generated."""
+    import threading
+    def _run():
+        try:
+            _cfg = load_config(_config_path())
+            Scheduler(_cfg, Store(_cfg.state_db), Fetcher()).start()
+        except Exception as exc:
+            print(f"background scraper disabled: {exc}", file=sys.stderr)
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+
+_start_scheduler()
+
+
 @app.before_request
 def _require_login():
     cred = _load_admin()
@@ -1340,18 +1355,7 @@ if __name__ == "__main__":
     # (Werkzeug's default is threaded=False) a single slow page load — the index
     # route does one network fetch per feed item — blocks every other connection
     # until it times out, so the site appears unreachable.
-    # Keep feeds fresh in the background via rssrob's Scheduler, so scraping is
-    # managed by this one service (no extra systemd units). The Flask reloader
-    # re-runs this script in a child process; Werkzeug sets WERKZEUG_RUN_MAIN
-    # there, so we start the scraper only in that serving process (not the
-    # reloader parent) — each site is scraped once, every site.interval.
+    # The scheduler is already started at module level (_start_scheduler).
     use_reloader = True
-    if not use_reloader or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
-        try:
-            _cfg = load_config(_config_path())
-            Scheduler(_cfg, Store(_cfg.state_db), Fetcher()).start()
-            print("background scraper started (rssrob.Scheduler)")
-        except Exception as exc:
-            print(f"background scraper disabled: {exc}", file=sys.stderr)
     app.run(host=args.host, port=args.port, ssl_context=ssl_context,
             debug=True, use_debugger=False, threaded=True, use_reloader=use_reloader)
