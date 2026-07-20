@@ -172,17 +172,41 @@ configs/
 ## 通知（Apprise）
 
 RSSRob 使用 [Apprise](https://github.com/caronc/apprise) 发送通知，支持 100+ 服务。
+完整通知 URL 列表见 [Apprise Supported Services](https://github.com/caronc/apprise/wiki/Notify-Goodies)。
+
+### 常用通知地址示例
 
 | 服务 | URL 格式 | 示例 |
 |------|---------|------|
 | Telegram | `tgram://bot_token/chat_id` | `tgram://123456:ABC-DEF/123456789` |
-| Discord | `discord://webhook_id/token` | `discord://123456/ABCdef...` |
-| Slack | `slack://token/a/b/c` | `slack://T0000/B0000/xxx` |
-| 邮件 | `mailto://user:pass@smtp_host` | `mailto://you@gmail.com:pass@smtp.gmail.com` |
+| Discord | `discord://webhook_id/token` | `discord://123456/ABCdefGHI...` |
+| Slack | `slack://token/a/b/c` | `slack://T00000000/B00000000/XXXXXXXX...` |
+| 邮件 (SMTP) | `mailto://user:pass@smtp_host` | `mailto://you@gmail.com:app_pass@smtp.gmail.com` |
 | ntfy | `ntfys://host/topic` | `ntfys://ntfy.yufei.im/RSS` |
-| Gotify | `gotify://host/token` | `gotify://gotify.example.com/AaBbCc` |
+| Gotify | `gotify://host/token` | `gotify://gotify.example.com/AaBbCcDd` |
+| Pushover | `pover://user_key/token` | `pover://uQiRzcho4Renci6rM2.../AbbCDeFgHiJkLmNoPqRsT` |
+| Bark (iOS) | `bark://host/key` | `bark://day.app/xxxx/yyyy` |
+| 钉钉 | `dingtalk://token` | `dingtalk://abc123...` |
+| 企业微信 | `wecom://token` | `wecom://xxxx...` |
+| Chanify | `chanify://token` | `chanify://xxxx...` |
+| Feishu | `feishu://token` | `feishu://xxxx...` |
 
-在 Web 管理界面的「通知」和「地址簿」页面配置通知目标。
+### 配置方式
+
+1. **Web 管理界面**：访问 `/notifications/targets`（地址簿）保存常用通知地址，然后在各订阅源的预览页选择订阅
+2. **Web 管理界面**：访问 `/notifications` 管理所有通知目标
+3. **命令行**：
+
+```bash
+# 预览所有目标的摘要
+python -m rssrob.digest --all-subscribers --dry-run
+
+# 发送单个订阅源的摘要
+python -m rssrob.digest --site <name>
+
+# 发送给指定目标
+python -m rssrob.digest --site <name> --to tgram://bot_token/chat_id
+```
 
 ---
 
