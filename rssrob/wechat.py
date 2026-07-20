@@ -19,7 +19,7 @@ import json
 import random
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 
 from .models import Item
@@ -106,7 +106,7 @@ class WeChatClient:
         """Map articles to the shared ``Item`` shape (date as ISO8601)."""
         items = []
         for a in raw:
-            date = (datetime.fromtimestamp(a.published_at, tz=timezone.utc).isoformat()
+            date = (datetime.fromtimestamp(a.published_at, tz=timezone(timedelta(hours=8))).isoformat()
                     if a.published_at is not None else None)
             items.append(Item(id=a.id, title=a.title, link=a.link,
                               summary=a.summary, date=date))
