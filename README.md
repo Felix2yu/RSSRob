@@ -1,26 +1,25 @@
 # RSSRob
 
-**English** | [中文](README.zh-CN.md)
+**一个轻量、可配置的工具，可为任意网站生成 RSS 订阅源 —— 即使该网站本身并不提供 RSS。**
 
-**A light, configurable tool that generates RSS feeds from any website — even sites that don't offer one.**
-
-For sites without a feed, you point RSSRob at a page and tell it (with CSS selectors or XPath) where the items and their fields live; for sites that already publish RSS/Atom, you just give it the feed URL. Either way, RSSRob runs on a schedule, builds a spec-correct RSS feed, and serves it over HTTP. It remembers everything it has seen, so your feed accumulates history and never shows the same item twice.
+对于没有订阅源的网站，你只需把 RSSRob 指向某个页面，并（用 CSS 选择器或 XPath）告诉它条目及其字段所在的位置；对于已经发布 RSS/Atom 的网站，直接给出订阅源 URL 即可。无论哪种方式，RSSRob 都会按计划定时运行、构建符合规范的 RSS 订阅源，并通过 HTTP 提供访问。它会记住所有见过的条目，因此你的订阅源会不断累积历史记录，且永远不会重复展示同一条目。
 
 ---
 
-## Features
+## 功能特性
 
-- **Four source types** — `html` sites are scraped with **CSS selectors or XPath**; `rss` sites already publish a feed, so RSSRob just parses and re-serves it (no selectors needed); `wechat` follows a 公众号 via your own backend; `twitter` follows an X account via your own logged-in session.
-- **Built-in scheduler** — one process scrapes each site on its own interval; no external cron needed.
-- **Built-in HTTP server** — serves each feed at a stable URL plus a simple index page.
-- **Dedup + history** — a SQLite store tracks every item ever seen. Items are added once (deduped by id), and your feed keeps a rolling window of the most recent N — so history survives even after items scroll off the source page.
-- **Spec-correct RSS** — feeds are generated with [`feedgen`](https://github.com/lkiesow/python-feedgen), not hand-rolled XML.
-- **Debug-friendly** — `run-once` scrapes a single site and prints what it extracted, so you can dial in selectors before committing them.
-- **Light footprint** — five dependencies, stdlib HTTP server and scheduler, single process.
+- **四种数据源类型** —— `html` 用 **CSS 选择器或 XPath** 抓取；`rss` 直接解析并重新提供已发布的订阅源（无需选择器）；`wechat` 通过你自己的后台跟踪公众号；`twitter` 通过你自己已登录的会话跟踪 X 账号。
+- **内置调度器** —— 单进程即可按各自的间隔抓取每个站点，无需外部 cron。
+- **内置 Web 管理界面** —— 浏览器中预览订阅源、调试选择器/过滤器、管理通知目标、备份恢复。
+- **多渠道通知** —— 通过 [Apprise](https://github.com/caronc/apprise) 支持 Telegram、Discord、Slack、邮件等 100+ 通知服务。
+- **去重 + 历史** —— 用 SQLite 记录所有出现过的条目。条目只入库一次（按 id 去重），订阅源保留最近 N 条的滚动窗口 —— 因此即使条目已从源页面滚走，历史依然保留。
+- **符合规范的 RSS** —— 订阅源由 [`feedgen`](https://github.com/lkiesow/python-feedgen) 生成，而非手写 XML。
+- **便于调试** —— `run-once` 抓取单个站点并打印提取结果，便于在正式提交前调好选择器。
+- **轻量** —— 依赖少，使用标准库的 HTTP 服务器与调度器，单进程运行。
 
 ---
 
-## How it works
+## 工作原理
 
 ```
                          ┌──────────────────────────────────────┐
@@ -38,29 +37,16 @@ For sites without a feed, you point RSSRob at a page and tell it (with CSS selec
                          └──────────────────────────────────────┘
 ```
 
-One scrape cycle for a site:
-
-1. **Fetch** — `requests` downloads the page (or feed).
-2. **Obtain items** — by source `type`:
-   - `html`: `extract` applies the *item* selector to get rows, then per-row *field* selectors.
-   - `rss`: `rss` parses the existing RSS/Atom feed with `feedparser`.
-   - Both produce the same shape → `[{id, title, link, summary, date}, …]`.
-3. **Store + dedup** — `store` inserts items whose `id` isn't already in SQLite, stamping `first_seen`. Items already known are skipped.
-4. **Generate** — `feed` reads the most recent N items for that feed from SQLite and writes `feeds/<name>.xml`.
-
-Meanwhile the HTTP server serves whatever XML files exist, independently of the scrape cycle.
-
 ---
 
-## Requirements
+## 环境要求
 
 - Python 3.11+
-- Dependencies (5): `requests`, `lxml`, `feedgen`, `pyyaml`, `feedparser`
-  - `feedgen` transitively brings in `python-dateutil` and `lxml`.
+- 依赖：`requests`、`lxml`、`feedgen`、`pyyaml`、`feedparser`、`apprise`、`qrcode`
 
 ---
 
-## Installation
+## 安装
 
 ```bash
 git clone <your-repo-url> RSSRob
@@ -72,570 +58,241 @@ pip install -r requirements.txt
 
 ## Docker
 
-### Build the image
+### 构建镜像
 
 ```bash
 docker build -t rssrob .
 ```
 
-### Run
-
-Mount your config and data directories into the container:
+### 运行
 
 ```bash
 docker run -d \
   --name rssrob \
-  -p 8080:8080 \
+  -p 5000:5000 \
   -v $(pwd)/configs:/app/configs \
   -v $(pwd)/var:/app/var \
-  rssrob serve
+  rssrob
 ```
-
-The HTTP server listens on `0.0.0.0:8080` inside the container. Change the port mapping (`-p`) as needed.
 
 ### Docker Compose
 
-Create a `docker-compose.yml`:
-
-```yaml
-services:
-  rssrob:
-    build: .
-    container_name: rssrob
-    command: serve
-    ports:
-      - "8080:8080"
-    volumes:
-      - ./configs:/app/configs
-      - ./var:/app/var
-    restart: unless-stopped
-```
-
-Then run:
-
 ```bash
 docker compose up -d
-docker compose logs -f    # watch startup output
+docker compose logs -f    # 查看启动日志
 ```
 
----
-
-## Quick start
-
-1. Create a `config.yaml` (see [Configuration](#configuration)):
-
-   ```yaml
-   output_dir: ./var/feeds
-   state_db: ./var/rssrob.db
-   http:
-     host: 127.0.0.1
-     port: 8080
-   defaults:
-     interval: 1800     # seconds between scrapes
-     max_items: 50      # items kept per feed
-
-   sites:
-     - name: example-blog
-       url: https://example.com/blog
-       title: "Example Blog"
-       item: "css:div.post"
-       fields:
-         title: "css:h2 a"
-         link: "css:h2 a@href"
-         summary: "css:p.excerpt"
-         date: "css:time@datetime"
-   ```
-
-2. Test your selectors against the live page **without** writing any feed:
-
-   ```bash
-   rssrob run-once example-blog
-   ```
-
-   This prints the extracted items so you can confirm the selectors are right.
-
-3. Start the scheduler + server:
-
-   ```bash
-   rssrob serve
-   ```
-
-4. Subscribe in your RSS reader to:
-
-   ```
-   http://127.0.0.1:8080/feeds/example-blog.xml
-   ```
-
-   Or open `http://127.0.0.1:8080/` for the index of all feeds.
+访问 `http://localhost:5000` 打开 Web 管理界面。
 
 ---
 
-## Configuration
+## 快速开始
 
-RSSRob loads config from a **`configs/` folder** by default — every `*.yaml` file
-in it is read in filename order and merged: global settings
-(`output_dir`/`state_db`/`http`/`defaults`) are merged by key, and feeds are
-collected from all files. Keep globals in one file (e.g. `configs/00-settings.yaml`)
-and **one feed per file** (a top-level mapping with `name`, no `sites:` wrapper):
+1. 创建 `configs/sites.yaml`：
+
+```yaml
+- name: example-blog
+  type: html
+  description: "示例博客"
+  url: https://example.com/blog
+  item: "css:div.post"
+  fields:
+    title: "css:h2 a"
+    link: "css:h2 a@href"
+    date: "css:time@datetime"
+```
+
+2. 测试选择器：
+
+```bash
+rssrob run-once example-blog
+```
+
+3. 启动服务：
+
+```bash
+rssrob serve
+```
+
+4. 在 RSS 阅读器中订阅：`http://127.0.0.1:8080/feeds/example-blog.xml`
+
+---
+
+## 配置
+
+RSSRob 默认从 `configs/` 文件夹加载配置。推荐结构：
 
 ```
 configs/
-├── 00-settings.yaml      # output_dir, state_db, http, defaults
-├── ipp-notices.yaml      # one feed
-├── python-insider.yaml
-└── …
+├── config.yaml          # 全局设置（output_dir, state_db, http, defaults）
+├── sites.yaml           # 所有订阅源（列表格式）
+├── ipp-notices.yaml     # 或每个订阅源一个文件
+└── ...
 ```
 
-A single `config.yaml` file still works too. Resolution order: `./configs/` if it
-exists, else `config.yaml`, else `config.example.yaml`. Override with
-`--config <file-or-dir>` (CLI) or `RSSROB_CONFIG` (web app).
+### 全局选项
 
-### Global options
+| 键 | 默认值 | 说明 |
+|-----|---------|------|
+| `output_dir` | `./var/feeds` | 生成的 XML 文件目录 |
+| `state_db` | `./var/rssrob.db` | SQLite 数据库路径 |
+| `http.host` | `127.0.0.1` | 服务器绑定地址 |
+| `http.port` | `8080` | 服务器端口 |
+| `defaults.interval` | `3600` | 抓取间隔（秒） |
+| `defaults.max_items` | `50` | 每个订阅源保留的最大条目数 |
 
-| Key | Default | Description |
-|-----|---------|-------------|
-| `output_dir` | `./var/feeds` | Where generated `<name>.xml` files are written and served from. |
-| `state_db` | `./var/rssrob.db` | SQLite file holding item history / dedup state. |
-| `http.host` | `127.0.0.1` | Host the server binds to. Use `0.0.0.0` to expose on your network. |
-| `http.port` | `8080` | Port for the HTTP server. |
-| `defaults.interval` | `3600` | Seconds between scrapes (per site, overridable). |
-| `defaults.max_items` | `50` | Max items retained per feed (rolling window). |
-| `defaults.timeout` | `20` | HTTP fetch timeout in seconds. |
-| `defaults.user_agent` | `RSSRob/0.1` | User-Agent sent when fetching pages. |
-| `defaults.max_age_days` | `365` | Delete items older than this many days from the store, per feed (overridable). `0`/null keeps everything. |
+### 单站点选项
 
-### Per-site options
+| 键 | 必填 | 说明 |
+|-----|------|------|
+| `name` | 是 | 唯一标识，用作文件名和 CLI 参数 |
+| `url` | 是 | 页面 URL（html）或订阅源 URL（rss） |
+| `type` | 否 | `html`（默认）、`rss`、`wechat`、`twitter` |
+| `description` | 否 | 显示名称，用于 RSS 标题和 UI 展示 |
+| `item` | html 必填 | 条目选择器 |
+| `fields` | html 必填 | 字段 → 选择器映射 |
+| `interval` | 否 | 覆盖默认抓取间隔 |
+| `proxy` | 否 | 每订阅源代理 |
+| `filter` | 否 | 关键词/正则包含–排除过滤 |
 
-| Key | Required | Description |
-|-----|----------|-------------|
-| `name` | yes | Unique id; used as the feed filename (`<name>.xml`) and CLI argument. |
-| `url` | yes | Page to scrape (`html`) or feed URL to parse (`rss`). |
-| `type` | no | `html` (default), `rss`, `wechat`, or `twitter`. Selects the source handling. |
-| `title` | html: yes / rss: no | RSS feed `<title>`. For `rss`, defaults to the source feed's title. |
-| `description` | no | RSS feed `<description>`. Defaults to the title (or the source feed's description for `rss`). |
-| `item` | html only | Selector matching each item/row on the page. Required for `html`; ignored for `rss`. |
-| `fields` | html only | Map of field name → selector (see below). Required for `html`; ignored for `rss`. |
-| `interval` | no | Overrides `defaults.interval` for this site. |
-| `max_items` | no | Overrides `defaults.max_items` for this site. |
-| `proxy` | no | Per-feed proxy for `html`/`rss` fetches (honored by both `rssrob serve` and the web preview); accepts `socks5://ip:port`, `http(s)://ip:port`, or a bare port. (`twitter` uses the global proxy instead — see below.) |
-| `article` | no | "Go deeper" selectors (`title`/`content`): follow each item's link for the full title + body. |
-| `filter` | no | Keyword/regex include–exclude. A mapping with `include`/`exclude` (YAML list or comma-separated string), optional `field` (default `title`), optional `regex: true`. Excluded items are never stored. |
-| `max_age_days` | no | Overrides `defaults.max_age_days` for this feed. `0` keeps all history. |
-
-#### `rss` source example
-
-For a site that already publishes a feed, no selectors are needed:
-
-```yaml
-sites:
-  - name: python-insider
-    type: rss
-    url: https://blog.python.org/feeds/posts/default
-    # title/description optional — inherited from the source feed
-    interval: 3600
-    max_items: 30
-```
-
-RSSRob parses that feed, applies the same dedup/history, and re-serves it at
-`/feeds/python-insider.xml`.
-
-### Fields
-
-Each entry under `fields` is a selector **evaluated relative to a single item element**:
-
-- `title` (recommended) — the item title.
-- `link` (recommended) — the item URL. Resolved to an absolute URL against the page URL.
-- `summary` (optional) — description / excerpt.
-- `date` (optional) — publication date. Parsed best-effort with `dateutil`; if missing or unparseable, the item's `first_seen` time is used instead.
-- `id` (optional) — stable identity for dedup. **Defaults to `link`.** Set this if links contain volatile query params or if you prefer another unique field.
-
-### Selector syntax
-
-A selector is a string with an optional engine prefix and an optional attribute suffix:
+### 选择器语法
 
 ```
 [css:|xpath:] <selector> [@attribute]
 ```
 
-- **Engine prefix** — `css:` for CSS selectors, `xpath:` for XPath. **No prefix means CSS.**
-- **Attributes** — for **CSS**, append `@attr` (e.g. `css:h2 a@href`). For **XPath**, use the native attribute axis (e.g. `xpath:.//a/@href`) — the `@attr` suffix is not used there because XPath already uses `@` in predicates. With no attribute, the element's text content is returned.
-
-Examples:
-
-| Selector | Meaning |
-|----------|---------|
-| `css:h2 a` | text of the `<a>` inside an `<h2>` |
-| `css:h2 a@href` | the `href` attribute of that link |
-| `css:time@datetime` | the `datetime` attribute of a `<time>` tag |
-| `xpath:.//h2/a` | text of the first matching link (XPath, relative to the item) |
-| `xpath:.//h2/a/@href` | the `href` via native XPath attribute axis |
-
-> CSS and XPath can be mixed freely across sites and even across fields within one site. Use whichever is clearer for a given page.
-
-#### Selecting a section by its heading text
-
-CSS can't match on text, so when several blocks share a class and only the
-heading distinguishes them, anchor on the heading with XPath and walk to the
-list. Worked example (the 通知公告 / "Announcements" block of an IPP homepage):
-
-```yaml
-sites:
-  - name: ipp-notices
-    type: html
-    url: http://www.ipp.cas.cn/
-    title: "IPP 通知公告"
-    item: "xpath://h2[normalize-space()='通知公告']/ancestor::div[contains(@class,'ipp2020-item')][1]//div[@class='bd']//ul/li"
-    fields:
-      title: "xpath:.//a"
-      link:  "xpath:.//a/@href"
-      date:  "xpath:.//span"
-```
-
-This selects exactly the 6 announcement items (sibling sections sharing the same
-class are excluded) and resolves each relative link to an absolute URL.
+| 选择器 | 含义 |
+|--------|------|
+| `css:h2 a` | `<h2>` 内 `<a>` 的文本 |
+| `css:h2 a@href` | 该链接的 `href` 属性 |
+| `xpath:.//h2/a` | 第一个匹配链接的文本 |
 
 ---
 
-## Dedup & history model
+## 通知（Apprise）
 
-The source page usually shows only *current* items, but a good feed should remember the past. RSSRob's SQLite store is the feed's **backing store**, not just a seen-set:
+RSSRob 使用 [Apprise](https://github.com/caronc/apprise) 发送通知，支持 100+ 服务。
 
-- Each scrape extracts the items currently on the page.
-- Items with a **new `id`** are inserted with a `first_seen` timestamp.
-- Items already in the store are **skipped** (this is the dedup).
-- The written `.xml` is the most recent `max_items` for that feed, ordered by date (or `first_seen` when no date is available).
+| 服务 | URL 格式 | 示例 |
+|------|---------|------|
+| Telegram | `tgram://bot_token/chat_id` | `tgram://123456:ABC-DEF/123456789` |
+| Discord | `discord://webhook_id/token` | `discord://123456/ABCdef...` |
+| Slack | `slack://token/a/b/c` | `slack://T0000/B0000/xxx` |
+| 邮件 | `mailto://user:pass@smtp_host` | `mailto://you@gmail.com:pass@smtp.gmail.com` |
+| ntfy | `ntfys://host/topic` | `ntfys://ntfy.yufei.im/RSS` |
+| Gotify | `gotify://host/token` | `gotify://gotify.example.com/AaBbCc` |
 
-Result: items keep appearing in your feed even after they scroll off the source page, and nothing is ever duplicated.
-
----
-
-## Filtering & recency
-
-Two optional knobs trim what each feed keeps.
-
-**Keyword / regex filters** — add a `filter:` block to drop items you don't
-want. Excluded items are dropped *before* they're stored, so they never reach
-the feed or email digests:
-
-```yaml
-name: example
-type: rss
-url: https://example.com/feed.xml
-filter:
-  include: [python, rust]     # keep only items matching one of these (omit to keep all)
-  exclude: [sponsored, ad]    # drop items matching any of these
-  field: title                # which item field to test (default: title)
-  regex: false                # true = treat terms as regex (re.search, case-insensitive)
-```
-
-Terms may be a YAML list or a comma-separated string. With `regex: false`
-(default) terms match as case-insensitive substrings; with `regex: true` each
-term is a regular expression (a malformed pattern is skipped, not fatal). The
-`/playground` page writes this block for you.
-
-**Recency** — RSSRob deletes items older than `max_age_days` (default **365**,
-one year) from the store on each cycle, by published date (falling back to
-`first_seen`). Override per feed with `max_age_days`, or set
-`defaults.max_age_days` globally; `0` (or null) keeps everything.
-Items are aged by their published date, so a source that backfills entries with old dates will have those pruned the first time they're seen, not retained for a year.
+在 Web 管理界面的「通知」和「地址簿」页面配置通知目标。
 
 ---
 
-## CLI
+## 微信公众号
+
+通过你自己注册的公众号后台（mp.weixin.qq.com）获取文章，RSSRob 只读不发。
+
+### 登录
+
+1. 打开 mp.weixin.qq.com 登录你的公众号
+2. 复制地址栏中的 token 和浏览器的 Cookie
+3. 在 Web 界面 `/wechat/login` 粘贴，或命令行：
 
 ```bash
-rssrob serve [--config config.yaml]
+rssrob wechat-login --token 123456789 --cookie "<cookie>"
 ```
-Loads the config, starts the background scheduler and the HTTP server, and runs until interrupted (Ctrl-C). This is the normal mode.
+
+### 添加订阅源
+
+在 Web 界面搜索公众号名称并保存，或命令行：
 
 ```bash
-rssrob run-once <site-name> [--config config.yaml]
+rssrob wechat-search "某某公众号" --save my-oa
 ```
-Scrapes a single site **once**, prints the extracted items to the terminal, and exits. Intended for debugging selectors before adding a site to your regular schedule. (By default it does not write to the store; pass `--write` to also persist + regenerate that feed.)
 
-```bash
-python -m rssrob.digest --all-subscribers [--config config.yaml] [--dry-run]
-```
-Emails **each subscriber one combined digest** containing the new items across
-every feed they follow (incremental — only items not already sent to that
-subscriber). Use `--subscriber you@example.com` for a single subscriber, or
-`--dry-run` to preview without sending. Run it from your own cron/timer at
-whatever cadence you want. The legacy `--site <feed>` mode (one email per feed to
-all its subscribers) still exists but uses a separate global sent-state; pick one
-mode for a given schedule.
+> 建议 `interval` ≥ 7200 秒，避免被限流。
 
 ---
 
-## Project structure
+## Twitter / X
+
+通过你自己已登录的 X 会话读取，无需付费 API。
+
+### 登录
+
+1. 登录 x.com，复制 Cookie 请求头
+2. 在 Web 界面 `/twitter/login` 粘贴，或命令行：
+
+```bash
+rssrob twitter-login --cookie "<cookie>"
+```
+
+### 添加订阅源
+
+```bash
+rssrob twitter-add elonmusk --save elon
+```
+
+---
+
+## 命令行
+
+```bash
+rssrob serve [--config config.yaml]           # 启动调度器 + 服务器
+rssrob run-once <site-name>                   # 单次抓取测试
+python -m rssrob.digest --all-subscribers     # 发送通知摘要
+python -m rssrob.digest --site <name>         # 发送单个订阅源摘要
+python -m rssrob.digest --dry-run             # 预览不发送
+```
+
+---
+
+## 项目结构
 
 ```
 RSSRob/
 ├── README.md
-├── requirements.txt          # core deps
-├── requirements-web.txt      # extra deps for the preview web app (flask)
-├── pyproject.toml            # pytest config (testpaths, import path)
-├── config.example.yaml       # sample single-file config
-├── configs/                  # default config folder — one file per feed
-│   ├── 00-settings.yaml      # globals (output_dir, state_db, http, defaults)
-│   └── <feed>.yaml           # one feed each
-├── rssrob/                   # the package
-│   ├── __init__.py
-│   ├── __main__.py           # `python -m rssrob`
-│   ├── cli.py                # argparse: serve / run-once
-│   ├── config.py             # load + validate YAML → dataclasses (proxy, article, …)
-│   ├── extract.py            # html: HTML + selectors → items (CSS/XPath, attrs, abs URLs)
-│   ├── rss.py                # rss: parse existing RSS/Atom feed → items (feedparser)
-│   ├── article.py            # follow a link → full title + content (feed enrichment)
-│   ├── store.py              # SQLite: insert/dedup/fetch-recent
-│   ├── feed.py               # items → RSS XML via feedgen
-│   ├── scheduler.py          # background per-site interval loop
-│   └── server.py             # stdlib http.server: /feeds/<name>.xml + index
-├── web/                      # preview web app
-│   ├── webapp.py             # Flask: feed preview + selector/filter playground
+├── requirements.txt
+├── requirements-web.txt
+├── config.example.yaml
+├── docker-compose.yml
+├── Dockerfile
+├── configs/                  # 配置文件夹
+│   ├── config.yaml           # 全局设置
+│   └── sites.yaml            # 订阅源列表
+├── rssrob/                   # 核心包
+│   ├── cli.py                # 命令行入口
+│   ├── config.py             # 配置加载
+│   ├── extract.py            # HTML 选择器提取
+│   ├── rss.py                # RSS/Atom 解析
+│   ├── store.py              # SQLite 存储
+│   ├── feed.py               # RSS XML 生成
+│   ├── notify.py             # Apprise 通知发送
+│   ├── subscribers.py        # 通知目标管理
+│   ├── notification_targets.py # 通知地址簿
+│   ├── scheduler.py          # 后台调度器
+│   └── server.py             # HTTP 服务器
+├── web/                      # Web 管理界面
+│   ├── webapp.py
 │   └── templates/
-├── tools/                    # standalone helper scripts
-│   ├── select_preview.py     # one-shot extraction → preview.html
-│   └── request_url.py        # download a page's HTML to a file
-├── samples/                  # saved pages for offline testing (ipp_page.html, …)
-├── tests/                    # pytest suite + fixtures + conftest.py
-├── docs/                     # specs and plans
-└── var/                      # runtime state (gitignored) — created on first run
-    ├── feeds/                # generated <name>.xml, served by the HTTP server
-    ├── rssrob.db             # SQLite item history + dedup state
-    ├── subscribers.json      # per-feed notification targets (Apprise URLs)
-    ├── digest_state.json     # "already notified" item ids (incremental digests)
-    ├── wechat_credential.json # 公众号 session cookie + token (personal secret)
-    └── twitter_credential.json # X session cookie (auth_token + ct0; personal secret)
+├── tests/
+└── var/                      # 运行时状态（gitignored）
+    ├── feeds/                # 生成的 XML
+    ├── rssrob.db             # SQLite 数据库
+    ├── subscribers.json      # 通知目标
+    └── ...
 ```
 
 ---
 
-## Development
-
-```bash
-pip install -r requirements.txt
-pytest                 # unit tests: extract, rss, article, store, feed, config, …
-```
-
-Tests use saved HTML fixtures so extraction is verified offline (CSS + XPath + attribute + relative-URL cases), an in-memory/temp SQLite for dedup, and well-formedness checks on generated RSS. `pyproject.toml` puts the repo root on the import path and points pytest at `tests/`.
-
-### Preview web app
-
-A browser tool to preview feeds and dial in selectors/filters before committing them to config:
+## 开发
 
 ```bash
 pip install -r requirements.txt -r requirements-web.txt
-python web/webapp.py                       # open http://127.0.0.1:5000/
-python web/webapp.py --proxy-port 7890     # default proxy for feeds that need one
-```
-
-- `/` — feed preview (full titles + descriptions, follows article links). Each feed has a **subscribe** form so readers can add notification targets.
-- `/playground` — live **selector & filter playground** for HTML *and* RSS sources; **Save** writes a tested site (selectors, `filter`, `proxy`) as one file per feed into `configs/` (or `config.yaml` in single-file mode).
-- `/wechat/login` — log in to your 公众号 backend and search/add 公众号 feeds.
-- `/twitter/login` — paste your x.com cookie and add X accounts as feeds.
-- `/backup` — **backup / restore**: download your config + all runtime state under `var/` (SQLite history, feeds, notification targets, digest state, 公众号 credential) as one `.zip`, and restore it on another instance or after a reinstall. The zip holds secrets — keep it private, and restart `rssrob serve` after restoring.
-
----
-
-## Notifications (Apprise)
-
-Readers subscribe to a feed via the **subscribe** form on its preview page by providing an Apprise notification URL; targets are stored in `var/subscribers.json` (gitignored — never committed).
-
-RSSRob uses [Apprise](https://github.com/caronc/apprise) to send notifications across 100+ services. Supported notification URL formats include:
-
-| Service | URL Format | Example |
-|---------|-----------|---------|
-| Telegram | `tgram://bot_token/chat_id` | `tgram://123456:ABC-DEF/123456789` |
-| Discord | `discord://webhook_id/token` | `discord://123456/ABCdef...` |
-| Slack | `slack://token/a/b/c` | `slack://T0000/B0000/xxx` |
-| Email | `mailto://user:pass@smtp_host` | `mailto://you@gmail.com:app_pass@smtp.gmail.com` |
-| Gotify | `gotify://host/token` | `gotify://gotify.example.com/AaBbCc` |
-| Pushover | `pover://user_key/token` | `pover://uQiRzcho4Renci6rM2-3d...` |
-
-Configure notification targets in the Web UI at `/notifications` or via CLI:
-
-```bash
-python -m rssrob.digest --all-subscribers --dry-run   # preview all targets
-python -m rssrob.digest --site <name> --dry-run       # preview one feed
+pytest
+python web/webapp.py          # 启动开发服务器
 ```
 
 ---
 
-## WeChat 订阅号 (Official Accounts)
-
-WeChat Official Accounts (公众号) publish no public RSS and block scraping their
-article lists. RSSRob lists them through **your own registered 公众号 backend**
-(mp.weixin.qq.com): its editor APIs can search any account by name and list that
-account's published articles. You log in once, search for an account, and RSSRob
-polls it on a schedule like any other feed.
-
-> **Requires your own 公众号.** You log in to mp.weixin.qq.com with your *own*
-> registered Official Account; RSSRob only ever reads (it never posts). WeChat
-> rate-limits these APIs ("频率限制"), so poll gently. The platform calls are
-> isolated in `rssrob/wechat.py` (`MpPlatformTransport`).
->
-> (微信读书 was evaluated first but its API doesn't expose 公众号 at all, which is
-> why this uses the 公众号平台 instead.)
-
-### 0. Register a 公众号 (if you don't have one)
-
-The account is just the "key" that unlocks the article-search API — you never have
-to publish from it.
-
-1. Go to <https://mp.weixin.qq.com/> → **立即注册** (Register).
-2. Choose **订阅号** (Subscription Account) — it's free. An individual (**个人**)
-   subject type works and needs only a Chinese ID + a bank-card / face verification.
-3. Finish email + identity verification and log in.
-
-### 1. Log in to mp.weixin.qq.com
-
-RSSRob captures the session **cookie + token** from a normal browser login:
-
-1. Open <https://mp.weixin.qq.com/> and log in to your own 公众号. (`rssrob
-   wechat-login` with no args, and the `/wechat/login` page, render a QR for this.)
-2. Copy the **token** from the address bar after login (`…&token=123456789`) — just
-   the number.
-3. Copy the **cookie** — the full `Cookie:` request header: DevTools (F12) →
-   **Network** → click any request to `mp.weixin.qq.com` → **Headers** → **Request
-   Headers** → copy the whole `Cookie` value. (Don't use `document.cookie` — the
-   login cookies are `HttpOnly` and won't appear there.)
-4. Save them. Easiest is the interactive prompt (no shell-quoting a long cookie):
-
-   ```bash
-   rssrob wechat-login        # prompts you to paste the token, then the cookie
-   ```
-
-   Or pass them as flags / use the web form:
-
-   ```bash
-   rssrob wechat-login --token 123456789 --cookie "<cookie string>"
-   ```
-
-   …or paste both into the **/wechat/login** page in the web app.
-
-The credential is saved to `var/wechat_credential.json` (gitignored — a personal
-secret). The session expires after a while; when it does, RSSRob logs a clear
-"re-login" message — just repeat the paste to refresh.
-
-### 2. Add a 公众号 as a feed
-
-Search by name and save a match:
-
-```bash
-rssrob wechat-search "某某公众号"               # list matches with their ids
-rssrob wechat-search "某某公众号" --save my-oa  # pick one; writes configs/my-oa.yaml
-```
-
-That writes a `type: wechat` feed config:
-
-```yaml
-name: my-oa
-type: wechat
-account_id: "MzAx...=="     # the account's fakeid (filled in by search)
-account_name: "某某公众号"   # default for the RSS <title>
-interval: 7200              # be polite — don't poll aggressively
-max_items: 50
-```
-
-Each item is the article's **title + publish time + summary**, linking out to the
-full article on `mp.weixin.qq.com`. The web app's `/wechat/login` page also has a
-search box that saves a feed for you.
-
-### Per-feed options (wechat)
-
-| Key | Required | Description |
-|-----|----------|-------------|
-| `type` | yes | Must be `wechat`. |
-| `account_id` | yes | The account's `fakeid`; written by `wechat-search`. |
-| `account_name` | no | Human label; defaults the RSS `<title>`. |
-| `interval` / `max_items` | no | As for other feeds. A longer `interval` (≥ 7200s) is recommended to avoid mp.weixin.qq.com rate-limiting. |
-
-`url`, `item`, and `fields` are **not** used for `wechat`. All wechat feeds share
-one platform client, so requests are serialized and spaced; on rate-limiting RSSRob
-backs off, and on an expired session it logs a clear "run `rssrob wechat-login`"
-message and keeps serving the last good feed.
-
----
-
-## Twitter / X feeds
-
-X (Twitter) publishes no free public RSS and its accounts sit behind a JS app and
-login wall. RSSRob reads an account through **your own logged-in X session**: it
-calls the same internal web GraphQL API the x.com site uses, sending your session
-cookies — no paid API, and no headless browser.
-
-> **Uses your own X session.** You paste the cookie from a logged-in x.com; RSSRob
-> only ever reads (it never posts). This is technically against X's ToS and the
-> session cookie expires (just re-paste), so treat it as personal-use. The HTTP
-> layer is isolated in `rssrob/twitter.py` (`GraphQlTransport`). X also rotates its
-> GraphQL query-ids periodically; if calls start failing with a "query-id rotated"
-> error, update `GraphQlTransport.QUERY_IDS`.
-
-### 1. Capture your X cookie
-
-Log in at <https://x.com/>, then copy your **`Cookie:` request header**:
-
-DevTools (F12) → **Network** → click any request to `x.com` → **Headers** →
-**Request Headers** → copy the entire `Cookie` value. (Don't use
-`document.cookie` — the important `auth_token` cookie is `HttpOnly`.) RSSRob pulls
-out the two cookies it needs (`auth_token` and `ct0`).
-
-```bash
-rssrob twitter-login                                  # prompts you to paste the cookie
-rssrob twitter-login --cookie "<cookie>" --proxy 7890 # non-interactive; optional proxy
-```
-
-…or paste it into the **/twitter/login** page in the web app. The credential is
-saved to `var/twitter_credential.json` (gitignored — a personal secret).
-
-### 2. Add an account as a feed
-
-```bash
-rssrob twitter-add elonmusk                  # show the resolved account
-rssrob twitter-add elonmusk --save elon      # save it; writes configs/elon.yaml
-```
-
-That writes a `type: twitter` feed config:
-
-```yaml
-name: elon
-type: twitter
-username: elonmusk
-account_id: "44196397"     # resolved rest_id; skips a lookup each cycle
-account_name: "Elon Musk"  # default for the RSS <title>
-```
-
-The web app's `/twitter/login` page also has an "add account" form.
-
-### Per-feed options (twitter)
-
-| Key | Required | Description |
-|-----|----------|-------------|
-| `type` | yes | Must be `twitter`. |
-| `username` | yes | The `@handle` (no `@`). |
-| `account_id` | no | The numeric `rest_id`; written by `twitter-add` to skip the handle lookup. |
-| `interval` / `max_items` | no | As for other feeds. |
-
-`url`, `item`, and `fields` are **not** used for `twitter`. All twitter feeds share
-one client; the proxy is global (set `RSSROB_PROXY`, or `twitter-login --proxy`).
-On an expired session RSSRob logs "run `rssrob twitter-login`" and keeps serving
-the last good feed.
-
-> **Proxy note:** per-feed `proxy:` applies to `html`/`rss` feeds (now honored on
-> the `rssrob serve` path too, not just the web preview). Twitter uses the global
-> proxy above.
-
----
-
-## Roadmap
-
-Deliberately left out to keep v1 light; easy to add later:
-
-- Per-feed item templates and full-content fetching (follow each link).
-- Cron-style schedules instead of fixed intervals.
-
----
-
-## License
+## 许可证
 
 TBD.
