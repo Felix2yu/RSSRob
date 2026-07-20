@@ -1,55 +1,52 @@
 {% extends "base.html" %}
-{% block title %}Backup / Restore · RSSRob{% endblock %}
+{% block title %}备份 / 恢复 · RSSRob{% endblock %}
 {% block content %}
-<h2 style="margin:.2rem 0 1rem">Backup &amp; Restore</h2>
+<h2 style="margin:.2rem 0 1rem">备份 &amp; 恢复</h2>
 
 {% if restored %}
   <div class="meta" style="border-left:4px solid var(--green);">
-    ✅ Restored <strong>{{ restored }}</strong> file(s). Restart
-    <code>rssrob serve</code> so the new config + database take effect.
+    ✅ 已恢复 <strong>{{ restored }}</strong> 个文件。重启
+    <code>rssrob serve</code> 以使新配置和数据库生效。
   </div>
 {% endif %}
 {% if restore_error %}
   <div class="error">⚠️ {{ restore_error }}</div>
 {% endif %}
 
-<p class="count">A backup bundles your <strong>config</strong> and all runtime
-  state under <code>var/</code> — the SQLite item history (<code>rssrob.db</code>),
-  generated feeds, the email subscriber list, digest state, and the 公众号
-  credential — into one <code>.zip</code>. Use it to move to another machine or
-  rebuild after a reinstall.</p>
+<p class="count">备份将您的<strong>配置</strong>和 <code>var/</code> 下的所有运行时状态
+  —— SQLite 条目历史（<code>rssrob.db</code>）、生成的订阅源、邮件订阅者列表、摘要状态和公众号
+  凭证 —— 打包为一个 <code>.zip</code> 文件。可用于迁移到其他机器或重装后恢复。</p>
 
 <div style="display:flex; gap:2rem; flex-wrap:wrap; align-items:flex-start;
             margin-top:1rem;">
   <div style="flex:1; min-width:260px;">
-    <h3 style="margin:.2rem 0 .5rem">Download a backup</h3>
-    <p class="count">Saves the current config + <code>var/</code> as a timestamped
-      zip.</p>
+    <h3 style="margin:.2rem 0 .5rem">下载备份</h3>
+    <p class="count">将当前配置 + <code>var/</code> 保存为带时间戳的
+      zip 文件。</p>
     <a href="{{ url_for('backup_download') }}">
-      <button style="padding:.5rem 1.1rem;">⬇ Download backup .zip</button>
+      <button style="padding:.5rem 1.1rem;">⬇ 下载备份 .zip</button>
     </a>
     <div class="notice" style="margin-top:.8rem;">
-      ⚠️ The zip contains <strong>secrets</strong> (your 公众号 cookie/token and
-      subscriber emails). Keep it private.
+      ⚠️ zip 文件包含<strong>敏感信息</strong>（您的公众号 cookie/token 和
+      订阅者邮箱）。请妥善保管。
     </div>
   </div>
 
   <div style="flex:1; min-width:260px;">
-    <h3 style="margin:.2rem 0 .5rem">Restore from a backup</h3>
-    <p class="count">Extracts the zip back into place,
-      <strong>overwriting</strong> the current config + <code>var/</code>.</p>
+    <h3 style="margin:.2rem 0 .5rem">从备份恢复</h3>
+    <p class="count">将 zip 解压到原位，
+      <strong>覆盖</strong>当前配置 + <code>var/</code>。</p>
     <form method="post" action="{{ url_for('backup_restore') }}"
           enctype="multipart/form-data">
       <input type="file" name="backup" accept=".zip" required
              style="display:block; margin-bottom:.6rem;">
       <button style="padding:.5rem 1.1rem;"
-              onclick="return confirm('Overwrite the current config and var/ with this backup?');">
-        ⬆ Upload &amp; restore
+              onclick="return confirm('用此备份覆盖当前配置和 var/？');">
+        ⬆ 上传并恢复
       </button>
     </form>
-    <div class="count" style="margin-top:.8rem;">After restoring, restart
-      <code>rssrob serve</code> — the running scheduler holds the old database
-      connection until then.</div>
+    <div class="count" style="margin-top:.8rem;">恢复后请重启
+      <code>rssrob serve</code> —— 运行中的调度器会保持旧数据库连接直到重启。</div>
   </div>
 </div>
 {% endblock %}

@@ -1,23 +1,21 @@
 {% extends "base.html" %}
-{% block title %}About · RSSRob{% endblock %}
+{% block title %}关于 · RSSRob{% endblock %}
 {% block content %}
-  <div class="eyebrow">about</div>
-  <h1>RSSRob <span class="badge testing">● testing</span></h1>
-  <p class="lede">A self-hosted feed engine — it turns websites, WeChat 公众号,
-    and X accounts that publish no RSS into clean, deduplicated feeds, on a
-    schedule.</p>
+  <div class="eyebrow">关于</div>
+  <h1>RSSRob <span class="badge testing">● 测试中</span></h1>
+  <p class="lede">自托管订阅引擎 —— 将没有 RSS 的网站、微信公众号
+    和 X 账号转化为干净、去重的订阅源，按计划自动更新。</p>
 
   <dl class="spec">
-    <div><dt>developer</dt><dd>Chenguang Wan</dd></div>
-    <div><dt>status</dt><dd>in testing — a pilot for <strong>research notifications</strong></dd></div>
-    <div><dt>sources</dt><dd><code>html</code> · <code>rss</code> ·
+    <div><dt>开发者</dt><dd>Chenguang Wan</dd></div>
+    <div><dt>状态</dt><dd>测试中 —— <strong>研究通知</strong>试点</dd></div>
+    <div><dt>数据源</dt><dd><code>html</code> · <code>rss</code> ·
       <code>wechat</code> · <code>twitter</code></dd></div>
-    <div><dt>pipeline</dt><dd>extract → store (SQLite) → serve</dd></div>
+    <div><dt>管道</dt><dd>提取 → 存储 (SQLite) → 服务</dd></div>
   </dl>
 
-  <p class="note">Right now this instance runs as a test bed for research notifications —
-    tracking the feeds that matter to ongoing work. Things may change or break
-    while it's being tuned.</p>
+  <p class="note">当前实例作为研究通知的测试平台运行 —— 跟踪与正在进行的工作相关的订阅源。
+    在调优过程中可能会有变动或中断。</p>
 
   <style>
     .lede { font-size: 1.05rem; color: var(--fg); max-width: 60ch;

@@ -1,36 +1,36 @@
 {% extends "base.html" %}
-{% block title %}{{ display_title }} · RSSRob preview{% endblock %}
+{% block title %}{{ display_title }} · RSSRob 预览{% endblock %}
 {% block content %}
 
   <div class="page-head">
     <div>
-      <div class="eyebrow">feed · preview</div>
+      <div class="eyebrow">订阅 · 预览</div>
       <h1>{{ display_title }}
         {% if source == "live" %}
-          <span class="badge live">● live</span>
+          <span class="badge live">● 实时</span>
         {% elif source == "saved" %}
-          <span class="badge saved">● saved copy</span>
+          <span class="badge saved">● 本地缓存</span>
         {% endif %}
       </h1>
     </div>
     <div style="display:flex;gap:.5rem;align-items:center;">
       <a class="btn-edit" href="{{ url_for('playground', site=site.name, edit='1') }}"
-         title="Edit this feed's config (fields, filter, delete)">✎ edit feed</a>
-      <button type="button" class="btn-edit" title="Trigger an immediate scrape"
-              onclick="runNow(this, '{{ url_for('run_now', name=site.name) }}')">▶ run now</button>
+         title="编辑此订阅的配置">✎ 编辑</a>
+      <button type="button" class="btn-edit" title="立即抓取"
+              onclick="runNow(this, '{{ url_for('run_now', name=site.name) }}')">▶ 立即抓取</button>
       <span id="run-status" style="font-size:.85rem;color:var(--muted);"></span>
     </div>
   </div>
 
   {% if source == "saved" %}
     <div class="notice">
-      Live fetch failed, showing the saved local copy.<br>
+      实时抓取失败，显示本地缓存副本。<br>
       <code>{{ fetch_error }}</code>
     </div>
   {% endif %}
 
   {% if subscribed %}
-    <div class="ok-banner">✓ Subscribed <strong>{{ subscribed }}</strong> to email updates for this feed.</div>
+    <div class="ok-banner">✓ 已订阅 <strong>{{ subscribed }}</strong> 的邮件更新。</div>
   {% endif %}
   {% if sub_error %}
     <div class="notice">{{ sub_error }}</div>
@@ -38,37 +38,37 @@
 
   <form class="subscribe" method="post" action="{{ url_for('subscribe') }}">
     <input type="hidden" name="site" value="{{ site.name }}">
-    <span class="sub-label">📧 Get email updates for this feed:</span>
+    <span class="sub-label">📧 订阅邮件更新：</span>
     <input type="email" name="email" placeholder="you@example.com" required>
-    <span class="freq">every <input type="number" name="hours" value="24" min="1" step="1"> hours</span>
-    <button type="submit">Subscribe</button>
+    <span class="freq">每 <input type="number" name="hours" value="24" min="1" step="1"> 小时</span>
+    <button type="submit">订阅</button>
     {% if subscriber_count %}
       <a class="sub-count" href="{{ url_for('index', site=site.name, show_subs=1) }}">
-        {{ subscriber_count }} subscribed</a>
+        {{ subscriber_count }} 人已订阅</a>
     {% endif %}
   </form>
 
   {% if show_subs %}
     <div class="sub-list">
       <div class="sub-list-head">
-        Subscribers for <strong>{{ site.description or site.title or site.name }}</strong> ({{ subscriber_count }})
-        <a href="{{ url_for('index', site=site.name) }}">hide</a>
+        <strong>{{ site.description or site.title or site.name }}</strong> 的订阅者 ({{ subscriber_count }})
+        <a href="{{ url_for('index', site=site.name) }}">收起</a>
       </div>
       {% if subscribers %}
         <ul>
           {% for e, hours in subscribers.items() %}
             <li>
-              <span>{{ e }} <span class="freq-tag">every {{ hours }}h</span></span>
+              <span>{{ e }} <span class="freq-tag">每 {{ hours }} 小时</span></span>
               <form method="post" action="{{ url_for('unsubscribe') }}">
                 <input type="hidden" name="site" value="{{ site.name }}">
                 <input type="hidden" name="email" value="{{ e }}">
-                <button type="submit" title="remove this subscriber">unsubscribe</button>
+                <button type="submit" title="取消订阅">取消订阅</button>
               </form>
             </li>
           {% endfor %}
         </ul>
       {% else %}
-        <div class="empty">No subscribers yet.</div>
+        <div class="empty">暂无订阅者。</div>
       {% endif %}
     </div>
   {% endif %}
@@ -117,39 +117,39 @@
   <div class="meta">
     {% if site.type == "wechat" %}
       <div>公众号: <strong>{{ site.account_name or site.account_id }}</strong>
-        <span class="count">· type <code>wechat</code> · fakeid
+        <span class="count">· 类型 <code>wechat</code> · fakeid
           <code>{{ site.account_id }}</code></span></div>
       {% if site.description %}
         <div>{{ site.description }}</div>
       {% endif %}
-      <div>Articles fetched via the 公众号平台 (mp.weixin.qq.com).</div>
+      <div>通过公众号平台 (mp.weixin.qq.com) 获取文章。</div>
     {% elif site.type == "twitter" %}
-      <div>X account: <strong>@{{ site.username }}</strong>
-        <span class="count">· type <code>twitter</code>{% if site.account_id %} ·
+      <div>X 账号: <strong>@{{ site.username }}</strong>
+        <span class="count">· 类型 <code>twitter</code>{% if site.account_id %} ·
           id <code>{{ site.account_id }}</code>{% endif %}</span></div>
       {% if site.description %}<div>{{ site.description }}</div>{% endif %}
-      <div>Tweets fetched via the X web API.</div>
+      <div>通过 X Web API 获取推文。</div>
     {% else %}
-      <div>Source: <a href="{{ site.url }}" target="_blank">{{ site.url }}</a>
-        <span class="count">· type <code>{{ site.type }}</code></span></div>
+      <div>来源: <a href="{{ site.url }}" target="_blank">{{ site.url }}</a>
+        <span class="count">· 类型 <code>{{ site.type }}</code></span></div>
       {% if site.type == "html" %}
-        <div>Item selector: <code>{{ site.item }}</code></div>
-        <div>Fields:
+        <div>条目选择器: <code>{{ site.item }}</code></div>
+        <div>字段:
           {% for name, sel in site.fields.items() %}
             {{ name }} <code>{{ sel }}</code>{% if not loop.last %} · {% endif %}
           {% endfor %}
         </div>
       {% else %}
-        <div>Parsed as an existing RSS/Atom feed (no selectors needed).</div>
+        <div>解析已有的 RSS/Atom 订阅源（无需选择器）。</div>
       {% endif %}
     {% endif %}
   </div>
 
-  <p class="count">{{ entries|length }} item{{ '' if entries|length == 1 else 's' }} selected</p>
+  <p class="count">共 {{ entries|length }} 条</p>
 
   {% if entries %}
   <table>
-    <thead><tr><th>#</th><th>Date</th><th>Title &amp; description</th></tr></thead>
+    <thead><tr><th>#</th><th>日期</th><th>标题 &amp; 描述</th></tr></thead>
     <tbody>
       {% for e in entries %}
       <tr>
@@ -157,9 +157,9 @@
         <td class="d">{{ e.item.date or "—" }}</td>
         <td class="t">
           {% if e.item.link %}
-            <a href="{{ e.item.link }}" target="_blank"{% if e.needs_enrich %} data-enrich="{{ e.item.link }}"{% endif %}>{{ e.title or "(untitled)" }}</a>
+            <a href="{{ e.item.link }}" target="_blank"{% if e.needs_enrich %} data-enrich="{{ e.item.link }}"{% endif %}>{{ e.title or "(无标题)" }}</a>
           {% else %}
-            {{ e.title or "(untitled)" }}
+            {{ e.title or "(无标题)" }}
           {% endif %}
           {% if e.desc %}
             <div class="summary">{{ e.desc }}</div>
@@ -172,7 +172,7 @@
     </tbody>
   </table>
   {% else %}
-    <div class="notice">No items matched. Check the selectors for this site.</div>
+    <div class="notice">未找到条目。请检查此站点的选择器配置。</div>
   {% endif %}
 
   {% if entries %}
@@ -210,17 +210,17 @@
   <script>
   function runNow(btn, url) {
     btn.disabled = true;
-    btn.textContent = '⏳ running…';
+    btn.textContent = '⏳ 抓取中…';
     var status = document.getElementById('run-status');
     fetch(url, {method: 'POST'}).then(function(r) { return r.json(); })
       .then(function(d) {
-        status.textContent = d.error ? '✕ ' + d.error : '✓ scrape started';
-        btn.textContent = '▶ run now';
+        status.textContent = d.error ? '✕ ' + d.error : '✓ 抓取已启动';
+        btn.textContent = '▶ 立即抓取';
         btn.disabled = false;
         setTimeout(function() { status.textContent = ''; }, 5000);
       }).catch(function() {
-        status.textContent = '✕ request failed';
-        btn.textContent = '▶ run now';
+        status.textContent = '✕ 请求失败';
+        btn.textContent = '▶ 立即抓取';
         btn.disabled = false;
       });
   }

@@ -1,22 +1,22 @@
 {% extends "base.html" %}
-{% block title %}Account · RSSRob{% endblock %}
+{% block title %}账户 · RSSRob{% endblock %}
 {% block content %}
-  <div class="eyebrow">account</div>
-  <h1>Admin login</h1>
+  <div class="eyebrow">账户</div>
+  <h1>管理员登录</h1>
   {% if saved %}
     <div class="notice" style="border-left-color:var(--green);background:#E1F6EE;color:#0B6D4E;">
-      Saved — your admin login has been updated.</div>
+      已保存 —— 您的管理员登录信息已更新。</div>
   {% endif %}
   {% if error %}<div class="error">{{ error }}</div>{% endif %}
   <form method="post" action="{{ url_for('account') }}" style="max-width:420px;">
-    <label style="display:block;margin:1rem 0 .35rem;font-size:.85rem;color:var(--muted);">Current password</label>
+    <label style="display:block;margin:1rem 0 .35rem;font-size:.85rem;color:var(--muted);">当前密码</label>
     <input name="current" type="password" autocomplete="current-password" required style="width:100%;">
-    <label style="display:block;margin:1rem 0 .35rem;font-size:.85rem;color:var(--muted);">New username</label>
+    <label style="display:block;margin:1rem 0 .35rem;font-size:.85rem;color:var(--muted);">新用户名</label>
     <input name="username" value="{{ username }}" autocomplete="username" style="width:100%;">
-    <label style="display:block;margin:1rem 0 .35rem;font-size:.85rem;color:var(--muted);">New password</label>
+    <label style="display:block;margin:1rem 0 .35rem;font-size:.85rem;color:var(--muted);">新密码</label>
     <input name="password" type="password" autocomplete="new-password" style="width:100%;">
-    <label style="display:block;margin:1rem 0 .35rem;font-size:.85rem;color:var(--muted);">Confirm new password</label>
+    <label style="display:block;margin:1rem 0 .35rem;font-size:.85rem;color:var(--muted);">确认新密码</label>
     <input name="confirm" type="password" autocomplete="new-password" style="width:100%;">
-    <button type="submit" style="margin-top:1.1rem;">Update login</button>
+    <button type="submit" style="margin-top:1.1rem;">更新登录信息</button>
   </form>
 {% endblock %}

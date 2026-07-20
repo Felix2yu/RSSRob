@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}RSSRob · feed console{% endblock %}</title>
+  <title>{% block title %}RSSRob · 订阅控制台{% endblock %}</title>
   <style>
     /* ── Feed Console — tokens ──────────────────────────────────────────────
        A self-hosted RSS engine's control desk: dark ink-teal rail, light
@@ -217,49 +217,49 @@
     <aside class="rail">
       <div class="rail-brand">
         <a href="{{ url_for('index') }}">rssrob<span class="cursor" aria-hidden="true"></span></a>
-        <div class="rail-tag">feed console</div>
+        <div class="rail-tag">订阅控制台</div>
       </div>
       <nav class="rail-nav" aria-label="Sections">
         <a href="{{ url_for('index') }}" class="{{ 'active' if request.endpoint == 'index' }}">
           <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="4" cy="12" r="1.2"/><path d="M4 9a3 3 0 0 1 3 3"/><path d="M4 5.5a6.5 6.5 0 0 1 6.5 6.5"/></svg>
-          <span>Feeds</span></a>
+          <span>订阅源</span></a>
         <a href="{{ url_for('playground') }}" class="{{ 'active' if request.endpoint == 'playground' }}">
           <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 5h12M2 11h12"/><circle cx="6" cy="5" r="1.7"/><circle cx="10" cy="11" r="1.7"/></svg>
-          <span>Sources</span></a>
+          <span>数据源</span></a>
         <a href="{{ url_for('email_list') }}" class="{{ 'active' if request.endpoint == 'email_list' }}">
           <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3.5" width="12" height="9" rx="1.6"/><path d="M2.6 4.8 8 8.6l5.4-3.8"/></svg>
-          <span>Email</span></a>
+          <span>邮件</span></a>
         <a href="{{ url_for('wechat_login') }}" class="{{ 'active' if request.endpoint == 'wechat_login' }}">
           <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3.5h10a1.5 1.5 0 0 1 1.5 1.5v4.5A1.5 1.5 0 0 1 13 11H7.5L4.5 13.5V11H3a1.5 1.5 0 0 1-1.5-1.5V5A1.5 1.5 0 0 1 3 3.5Z"/></svg>
-          <span>WeChat</span></a>
+          <span>微信</span></a>
         <a href="{{ url_for('twitter_login') }}" class="{{ 'active' if request.endpoint == 'twitter_login' }}">
           <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.6 3.6 12.4 12.4M12.4 3.6 3.6 12.4"/></svg>
           <span>X / Twitter</span></a>
         <a href="{{ url_for('backup_page') }}" class="{{ 'active' if request.endpoint == 'backup_page' }}">
           <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2.5" y="3" width="11" height="3" rx="1"/><path d="M3.5 6v6a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V6"/><path d="M8 8v3M6.4 9.6 8 11.2l1.6-1.6"/></svg>
-          <span>Backup</span></a>
+          <span>备份</span></a>
         <a href="{{ url_for('about') }}" class="{{ 'active' if request.endpoint == 'about' }}">
           <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M8 7.2v3.6"/><circle cx="8" cy="5.3" r=".4" fill="currentColor" stroke="none"/></svg>
-          <span>About</span></a>
+          <span>关于</span></a>
       </nav>
       <div class="rail-foot">
         {% if admin_user %}
         <div class="rail-account" style="margin-bottom:.5rem;">
-          <a href="{{ url_for('account') }}" style="color:var(--rail-fg);display:block;margin-bottom:.3rem;">{{ admin_user }} · account</a>
+          <a href="{{ url_for('account') }}" style="color:var(--rail-fg);display:block;margin-bottom:.3rem;">{{ admin_user }} · 账户</a>
           <form method="post" action="{{ url_for('logout') }}" style="display:inline;">
-            <button type="submit" style="background:none;border:0;padding:0;font:inherit;color:var(--rail-muted);text-decoration:underline;cursor:pointer;">log out</button>
+            <button type="submit" style="background:none;border:0;padding:0;font:inherit;color:var(--rail-muted);text-decoration:underline;cursor:pointer;">退出登录</button>
           </form>
         </div>
         {% endif %}
-        <div><span class="pulse" aria-hidden="true"></span><span class="on">engine online</span></div>
-        <div>rssrob · pipeline</div>
+        <div><span class="pulse" aria-hidden="true"></span><span class="on">引擎运行中</span></div>
+        <div>rssrob · 管道</div>
       </div>
     </aside>
 
     <main class="main">
       {% if sites %}
       <nav class="channels" aria-label="Feeds">
-        <span class="channels-label">channels</span>
+        <span class="channels-label">频道</span>
         {% for s in sites %}
           <a class="chan {{ 'active' if s.name == active else '' }}"
              href="{{ url_for('playground', site=s.name, edit='1') }}">
@@ -271,16 +271,16 @@
       {% if not admin_required %}
       <div class="notice" style="margin:1rem 2rem 0;">
         {% if admin_can_setup %}
-          ⚠ No admin password set — <a href="{{ url_for('setup') }}">set a password</a> to protect this console.
+          ⚠ 未设置管理员密码 — <a href="{{ url_for('setup') }}">设置密码</a> 以保护控制台。
         {% else %}
-          ⚠ No admin password set — run <code>rssrob set-admin-password</code> on the host (or open this page from localhost).
+          ⚠ 未设置管理员密码 — 请在宿主机运行 <code>rssrob set-admin-password</code>（或从 localhost 访问此页面）。
         {% endif %}
       </div>
       {% endif %}
       <div class="content">
         {% block content %}{% endblock %}
       </div>
-      <footer>rendered by rssrob's own extraction pipeline
+      <footer>由 rssrob 自有提取管道渲染
         · <code>rssrob.pipeline.obtain_items</code></footer>
     </main>
   </div>

@@ -1,27 +1,27 @@
 {% extends "base.html" %}
-{% block title %}Email subscribers · RSSRob{% endblock %}
+{% block title %}邮件订阅 · RSSRob{% endblock %}
 {% block content %}
 
-  <h1 style="margin:.2rem 0 .1rem; font-size:1.25rem;">Email subscribers</h1>
-  <p class="count">{{ by_email|length }} email{{ '' if by_email|length == 1 else 's' }} ·
-     digest frequency is per email (applies to all its feeds)</p>
+  <h1 style="margin:.2rem 0 .1rem; font-size:1.25rem;">邮件订阅</h1>
+  <p class="count">{{ by_email|length }} 个邮箱 ·
+     摘要频率按邮箱设置（适用于其所有订阅源）</p>
 
   {% if updated %}
-    <div class="ok-banner">✓ Updated frequency for <strong>{{ updated }}</strong>.</div>
+    <div class="ok-banner">✓ 已更新 <strong>{{ updated }}</strong> 的频率。</div>
   {% endif %}
   {% if added %}
-    <div class="ok-banner">✓ Subscribed <strong>{{ added }}</strong>.</div>
+    <div class="ok-banner">✓ 已订阅 <strong>{{ added }}</strong>。</div>
   {% endif %}
   {% if add_error %}
     <div class="notice">{{ add_error }}</div>
   {% endif %}
   {% if sent %}
     {% if sent_items and sent_items|int > 0 %}
-      <div class="ok-banner">✓ Sent a digest to <strong>{{ sent }}</strong>
-        — {{ sent_items }} item{{ '' if sent_items|int == 1 else 's' }} across
-        {{ sent_feeds }} feed{{ '' if sent_feeds|int == 1 else 's' }}.</div>
+      <div class="ok-banner">✓ 已向 <strong>{{ sent }}</strong> 发送摘要
+        —— {{ sent_items }} 条来自
+        {{ sent_feeds }} 个订阅源。</div>
     {% else %}
-      <div class="ok-banner">No new items for <strong>{{ sent }}</strong>'s feeds — nothing sent.</div>
+      <div class="ok-banner"><strong>{{ sent }}</strong> 的订阅源暂无新条目 —— 未发送。</div>
     {% endif %}
   {% endif %}
   {% if send_error %}
@@ -30,23 +30,23 @@
 
   {% if sites %}
   <form class="add-sub" method="post" action="{{ url_for('add_feed') }}">
-    <strong>Add a subscriber:</strong>
+    <strong>添加订阅者：</strong>
     <input type="email" name="email" placeholder="you@example.com" required>
-    <span>to</span>
+    <span>订阅</span>
     <select name="site" required>
-      <option value="" disabled selected>choose a feed…</option>
-      {% for s in sites %}<option value="{{ s.name }}">{{ s.name }}</option>{% endfor %}
+      <option value="" disabled selected>选择订阅源…</option>
+      {% for s in sites %}<option value="{{ s.name }}">{{ s.description or s.name }}</option>{% endfor %}
     </select>
-    <span>every</span>
-    <input type="number" name="hours" value="24" min="1" step="1" title="frequency (hours)">
-    <span>hours</span>
-    <button type="submit">add</button>
+    <span>每</span>
+    <input type="number" name="hours" value="24" min="1" step="1" title="频率（小时）">
+    <span>小时</span>
+    <button type="submit">添加</button>
   </form>
   {% endif %}
 
   {% if by_email %}
   <table>
-    <thead><tr><th>Email</th><th>Every (hours)</th><th>Subscribed feeds</th><th></th></tr></thead>
+    <thead><tr><th>邮箱</th><th>频率（小时）</th><th>已订阅的源</th><th></th></tr></thead>
     <tbody>
       {% for email, info in by_email.items() %}
       <tr>
@@ -55,7 +55,7 @@
           <form method="post" action="{{ url_for('set_frequency') }}" class="freq-form">
             <input type="hidden" name="email" value="{{ email }}">
             <input type="number" name="hours" value="{{ info.hours }}" min="1" step="1">
-            <button type="submit">update</button>
+            <button type="submit">更新</button>
           </form>
         </td>
         <td>
@@ -76,16 +76,16 @@
               <select name="site">
                 {% for s in available %}<option value="{{ s.name }}">{{ s.name }}</option>{% endfor %}
               </select>
-              <button type="submit" title="subscribe {{ email }} to this feed">+ add</button>
+              <button type="submit" title="订阅 {{ email }} 到此源">+ 添加</button>
             </form>
           {% endif %}
         </td>
         <td>
           <form method="post" action="{{ url_for('send_now') }}"
-                onsubmit="return confirm('Email {{ email }} new items from their feeds now?')">
+                onsubmit="return confirm('立即向 {{ email }} 发送其订阅源的新条目？')">
             <input type="hidden" name="email" value="{{ email }}">
             <button type="submit" class="send-now"
-                    title="email {{ email }} their feeds' new items now">Send now</button>
+                    title="立即向 {{ email }} 发送新条目">立即发送</button>
           </form>
         </td>
       </tr>
@@ -93,8 +93,8 @@
     </tbody>
   </table>
   {% else %}
-    <div class="notice">No subscribers yet. Readers subscribe from a feed's
-      <a href="{{ url_for('index') }}">preview page</a>.</div>
+    <div class="notice">暂无订阅者。读者可从订阅源的
+      <a href="{{ url_for('index') }}">预览页面</a>订阅。</div>
   {% endif %}
 
   <style>

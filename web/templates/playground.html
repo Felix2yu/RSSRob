@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Selector & filter playground · RSSRob{% endblock %}
+{% block title %}选择器 & 过滤器 · RSSRob{% endblock %}
 {% block content %}
 <style>
   form.pg label { display:block; font-size:.78rem; color:#656d76; text-transform:uppercase;
@@ -35,74 +35,74 @@
   tr.dropped td.t a { color:#9aa3ad; }
 </style>
 
-  <h1 style="margin:.2rem 0 .2rem; font-size:1.25rem;">Selector &amp; filter playground</h1>
-  <p class="count">Edit the selectors and filter, then run — items are extracted live
-    (with offline fallback) and tagged kept/dropped by your filter.</p>
+  <h1 style="margin:.2rem 0 .2rem; font-size:1.25rem;">选择器 &amp; 过滤器</h1>
+  <p class="count">编辑选择器和过滤器，然后运行 — 条目将实时提取（支持离线回退），
+    并根据过滤器标记保留/丢弃。</p>
 
-  {% if saved %}<div class="ok">Saved “{{ saved }}” to your config. It now appears
-    in the site nav and is used by <code>rssrob serve</code>.</div>{% endif %}
+  {% if saved %}<div class="ok">已保存 "{{ saved }}" 到配置。它现在出现在
+    站点导航中，并被 <code>rssrob serve</code> 使用。</div>{% endif %}
   {% if save_error %}<div class="error">{{ save_error }}</div>{% endif %}
 
   <form class="pg" method="get" action="{{ url_for('playground') }}">
-    <label>Feed type</label>
+    <label>订阅类型</label>
     <div class="typesel">
       <label class="inline"><input type="radio" name="type" value="html"
-        {{ 'checked' if ptype == 'html' else '' }}> HTML page</label>
+        {{ 'checked' if ptype == 'html' else '' }}> HTML 页面</label>
       <label class="inline"><input type="radio" name="type" value="rss"
         {{ 'checked' if ptype == 'rss' else '' }}> RSS / Atom</label>
       <label class="inline"><input type="radio" name="type" value="wechat"
-        {{ 'checked' if ptype == 'wechat' else '' }}> WeChat 公众号</label>
+        {{ 'checked' if ptype == 'wechat' else '' }}> 微信公众号</label>
       <label class="inline"><input type="radio" name="type" value="twitter"
         {{ 'checked' if ptype == 'twitter' else '' }}> Twitter / X</label>
     </div>
 
     <div class="for-url"{% if ptype not in ('html', 'rss') %} style="display:none"{% endif %}>
-      <label>Page / feed URL</label>
+      <label>页面 / 订阅源 URL</label>
       <input type="text" name="url" value="{{ form.url }}">
     </div>
 
     <div class="for-html"{% if ptype != 'html' %} style="display:none"{% endif %}>
-      <label>Item selector (css: or xpath:)</label>
+      <label>条目选择器 (css: 或 xpath:)</label>
       <input type="text" name="item" value="{{ form.item }}">
 
       <div class="row">
-        <div><label>title</label><input type="text" name="title_sel" value="{{ form.title_sel }}"></div>
-        <div><label>link</label><input type="text" name="link_sel" value="{{ form.link_sel }}"></div>
-        <div><label>date</label><input type="text" name="date_sel" value="{{ form.date_sel }}"></div>
+        <div><label>标题</label><input type="text" name="title_sel" value="{{ form.title_sel }}"></div>
+        <div><label>链接</label><input type="text" name="link_sel" value="{{ form.link_sel }}"></div>
+        <div><label>日期</label><input type="text" name="date_sel" value="{{ form.date_sel }}"></div>
       </div>
 
-      <label>article body selector (optional — follow each item's link for a short description)</label>
+      <label>文章正文选择器（可选 — 跟踪每个条目的链接获取简短描述）</label>
       <input type="text" name="article_sel" value="{{ form.article_sel }}"
              placeholder="css:.text   (maps to article.content)">
     </div>
 
     <div class="for-wechat"{% if ptype != 'wechat' %} style="display:none"{% endif %}>
       <div class="row">
-        <div><label>account_id (公众号 fakeid)</label><input type="text" name="account_id" value="{{ form.account_id }}"></div>
-        <div><label>account_name (label)</label><input type="text" name="account_name" value="{{ form.account_name }}"></div>
+        <div><label>account_id（公众号 fakeid）</label><input type="text" name="account_id" value="{{ form.account_id }}"></div>
+        <div><label>account_name（标签）</label><input type="text" name="account_name" value="{{ form.account_name }}"></div>
       </div>
     </div>
 
     <div class="for-twitter"{% if ptype != 'twitter' %} style="display:none"{% endif %}>
       <div class="row">
-        <div><label>username (@handle)</label><input type="text" name="username" value="{{ form.username }}"></div>
-        <div><label>account_name (label)</label><input type="text" name="account_name" value="{{ form.account_name }}"></div>
+        <div><label>username（@用户名）</label><input type="text" name="username" value="{{ form.username }}"></div>
+        <div><label>account_name（标签）</label><input type="text" name="account_name" value="{{ form.account_name }}"></div>
       </div>
     </div>
 
-    <label>proxy (optional — for feeds behind a firewall)</label>
+    <label>代理（可选 — 用于防火墙后的订阅源）</label>
     <input type="text" name="proxy" value="{{ form.proxy }}"
            placeholder="socks5://127.0.0.1:1080  or  http://127.0.0.1:7890">
 
     <div class="filters">
       <div class="row">
-        <div><label>include (any of, comma-separated)</label>
+        <div><label>包含（任一匹配，逗号分隔）</label>
           <input type="text" name="include" value="{{ include }}"></div>
-        <div><label>exclude (any of, comma-separated)</label>
+        <div><label>排除（任一匹配，逗号分隔）</label>
           <input type="text" name="exclude" value="{{ exclude }}"></div>
       </div>
       <div class="opts">
-        <div><label>filter field</label>
+        <div><label>过滤字段</label>
           <select name="field">
             {% for f in ["title", "link", "date", "summary"] %}
               <option value="{{ f }}" {{ 'selected' if field == f else '' }}>{{ f }}</option>
@@ -110,23 +110,23 @@
           </select>
         </div>
         <label style="text-transform:none; margin:0;">
-          <input type="checkbox" name="regex" {{ 'checked' if regex else '' }}> regex match
+          <input type="checkbox" name="regex" {{ 'checked' if regex else '' }}> 正则匹配
         </label>
       </div>
     </div>
 
     <div class="saverow">
-      <button type="submit" class="run"{% if ptype not in ('html', 'rss') %} style="display:none"{% endif %}>Run</button>
-      <span class="sep"{% if ptype not in ('html', 'rss') %} style="display:none"{% endif %}>or save the current config →</span>
+      <button type="submit" class="run"{% if ptype not in ('html', 'rss') %} style="display:none"{% endif %}>运行</button>
+      <span class="sep"{% if ptype not in ('html', 'rss') %} style="display:none"{% endif %}>或保存当前配置 →</span>
       <input type="text" name="name" value="{{ form_name }}"
-             placeholder="site name (e.g. suzhou-tourism)">
+             placeholder="站点名称（如 suzhou-tourism）">
       <input type="text" name="description" value="{{ form_description }}"
-             placeholder="display name (e.g. 苏州旅游最新资讯)">
+             placeholder="显示名称（如 苏州旅游最新资讯）">
       <button type="submit" class="save" formmethod="post"
-              formaction="{{ url_for('save') }}">Save to config</button>
+              formaction="{{ url_for('save') }}">保存配置</button>
       {% if editing_existing %}
         <button type="button" id="delete-feed-btn" class="danger"
-                title="Delete this feed">🗑 delete feed</button>
+                title="删除此订阅">🗑 删除订阅</button>
       {% endif %}
     </div>
   </form>
@@ -135,13 +135,13 @@
     <div class="error" style="margin-top:1.2rem;">{{ error }}</div>
   {% elif results is not none %}
     <div class="summary-bar">
-      <strong>{{ kept_n }}</strong> kept / {{ total }} matched
-      {% if source == "live" %}<span class="badge live">● live</span>
-      {% elif source == "saved" %}<span class="badge saved">● saved copy</span>{% endif %}
+      <strong>{{ kept_n }}</strong> 保留 / {{ total }} 匹配
+      {% if source == "live" %}<span class="badge live">● 实时</span>
+      {% elif source == "saved" %}<span class="badge saved">● 本地缓存</span>{% endif %}
     </div>
     {% if results %}
     <table>
-      <thead><tr><th>#</th><th>Filter</th><th>Date</th><th>Title</th></tr></thead>
+      <thead><tr><th>#</th><th>过滤</th><th>日期</th><th>标题</th></tr></thead>
       <tbody>
         {% for r in results %}
         <tr class="{{ '' if r.kept else 'dropped' }}">
@@ -150,15 +150,15 @@
           <td class="d">{{ r.item.date or "—" }}</td>
           <td class="t">
             {% if r.item.link %}
-              <a href="{{ r.item.link }}" target="_blank">{{ r.item.title or "(untitled)" }}</a>
-            {% else %}{{ r.item.title or "(untitled)" }}{% endif %}
+              <a href="{{ r.item.link }}" target="_blank">{{ r.item.title or "(无标题)" }}</a>
+            {% else %}{{ r.item.title or "(无标题)" }}{% endif %}
           </td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
     {% else %}
-      <div class="notice">No items found. Check the selectors (HTML) or the feed URL (RSS).</div>
+      <div class="notice">未找到条目。请检查选择器（HTML）或订阅源 URL（RSS）。</div>
     {% endif %}
   {% endif %}
 
@@ -189,13 +189,13 @@
   })();
   {% if editing_existing %}
   document.getElementById("delete-feed-btn").addEventListener("click", async () => {
-    if (!confirm("Remove the feed “{{ form_name }}”? This deletes its config, "
-                 + "generated XML and subscribers (item history is kept).")) return;
+    if (!confirm("删除订阅 “{{ form_name }}”+ 这将删除其配置、 "
+                 + "生成的 XML 和订阅者（条目历史将保留）.")) return;
     const fd = new FormData(); fd.append("name", "{{ form_name }}");
     const r = await fetch("{{ url_for('delete_feed') }}", { method: "POST", body: fd });
     const d = await r.json();
     if (d.deleted) { window.location.href = "{{ url_for('index') }}"; }
-    else { alert("Could not delete: " + (d.error || r.status)); }
+    else { alert("删除失败：" + (d.error || r.status)); }
   });
   {% endif %}
 </script>

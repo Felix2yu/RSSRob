@@ -1,16 +1,16 @@
 {% extends "_auth_base.html" %}
-{% block title %}Set up · RSSRob{% endblock %}
+{% block title %}设置 · RSSRob{% endblock %}
 {% block card %}
   <form class="card" method="post" action="{{ url_for('setup') }}">
     <h1 class="brand">rssrob<span class="cur">_</span></h1>
-    <p class="sub">Set an admin username and password to protect this console.</p>
-    <label for="u">Username</label>
+    <p class="sub">设置管理员用户名和密码以保护控制台。</p>
+    <label for="u">用户名</label>
     <input id="u" name="username" value="admin" autocomplete="username" autofocus>
-    <label for="p">Password</label>
+    <label for="p">密码</label>
     <input id="p" name="password" type="password" autocomplete="new-password">
-    <label for="c">Confirm password</label>
+    <label for="c">确认密码</label>
     <input id="c" name="confirm" type="password" autocomplete="new-password">
     {% if error %}<div class="err">{{ error }}</div>{% endif %}
-    <button type="submit">Set password</button>
+    <button type="submit">设置密码</button>
   </form>
 {% endblock %}
