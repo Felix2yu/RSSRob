@@ -16,9 +16,9 @@
     <div style="display:flex;gap:.5rem;align-items:center;">
       <a class="btn-edit" href="{{ url_for('playground', site=site.name, edit='1') }}"
          title="Edit this feed's config (fields, filter, delete)">✎ edit feed</a>
-      <form method="post" action="{{ url_for('run_now', name=site.name) }}" style="margin:0;">
-        <button type="submit" class="btn-edit" title="Trigger an immediate scrape">▶ run now</button>
-      </form>
+      <button type="button" class="btn-edit" title="Trigger an immediate scrape"
+              onclick="runNow(this, '{{ url_for('run_now', name=site.name) }}')">▶ run now</button>
+      <span id="run-status" style="font-size:.85rem;color:var(--muted);"></span>
     </div>
   </div>
 
@@ -206,5 +206,24 @@
   })();
   </script>
   {% endif %}
+
+  <script>
+  function runNow(btn, url) {
+    btn.disabled = true;
+    btn.textContent = '⏳ running…';
+    var status = document.getElementById('run-status');
+    fetch(url, {method: 'POST'}).then(function(r) { return r.json(); })
+      .then(function(d) {
+        status.textContent = d.error ? '✕ ' + d.error : '✓ scrape started';
+        btn.textContent = '▶ run now';
+        btn.disabled = false;
+        setTimeout(function() { status.textContent = ''; }, 5000);
+      }).catch(function() {
+        status.textContent = '✕ request failed';
+        btn.textContent = '▶ run now';
+        btn.disabled = false;
+      });
+  }
+  </script>
 
 {% endblock %}
