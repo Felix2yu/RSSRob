@@ -46,15 +46,19 @@ class Subscribers:
         self.path = path
         self._lock = threading.Lock()
 
-    def _load(self) -> Tuple[dict, dict]:
-        """Return (feeds {feed: [urls]}, frequencies {url: hours})."""
+    def _load_raw(self) -> dict:
+        """Return the full raw JSON dict from disk."""
         if not os.path.exists(self.path):
-            return {}, {}
+            return {}
         with open(self.path, encoding="utf-8") as f:
             try:
-                raw = json.load(f) or {}
+                return json.load(f) or {}
             except (json.JSONDecodeError, ValueError):
-                raw = {}
+                return {}
+
+    def _load(self) -> Tuple[dict, dict]:
+        """Return (feeds {feed: [urls]}, frequencies {url: hours})."""
+        raw = self._load_raw()
 
         if isinstance(raw.get("feeds"), dict):
             feeds = {}
@@ -96,10 +100,14 @@ class Subscribers:
     def _save(self, feeds: dict, freqs: dict) -> None:
         directory = os.path.dirname(self.path) or "."
         os.makedirs(directory, exist_ok=True)
+        # preserve auth_notify and any future top-level keys
+        existing = self._load_raw()
+        payload = {"feeds": feeds, "frequencies": freqs}
+        if "auth_notify" in existing:
+            payload["auth_notify"] = existing["auth_notify"]
         tmp = self.path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
-            json.dump({"feeds": feeds, "frequencies": freqs}, f,
-                      ensure_ascii=False, indent=2, sort_keys=True)
+            json.dump(payload, f, ensure_ascii=False, indent=2, sort_keys=True)
         os.replace(tmp, self.path)
 
     def list(self, feed: str) -> List[str]:
@@ -174,3 +182,65 @@ class Subscribers:
                 freqs.pop(url, None)
             self._save(feeds, freqs)
         return True
+
+    # ── auth-notify settings (token expiry notifications) ─────────────
+
+    def auth_notify_enabled(self) -> bool:
+        """Whether token-expiry notifications are enabled (default True)."""
+        raw = self._load_raw()
+        an = raw.get("auth_notify")
+        if not isinstance(an, dict):
+            return True  # default: enabled
+        return an.get("enabled", True)
+
+    def set_auth_notify_enabled(self, enabled: bool) -> None:
+        with self._lock:
+            feeds, freqs = self._load()
+            raw = self._load_raw()
+            an = raw.get("auth_notify") or {}
+            an["enabled"] = bool(enabled)
+            # preserve existing targets
+            if "targets" not in an:
+                an["targets"] = []
+            # write back via _save which preserves auth_notify
+            self._save_with(feeds, freqs, auth_notify=an)
+
+    def auth_notify_targets(self) -> List[str]:
+        """Specific targets for auth notifications; empty = all targets."""
+        raw = self._load_raw()
+        an = raw.get("auth_notify") or {}
+        return an.get("targets") or []
+
+    def set_auth_notify_targets(self, targets: List[str]) -> None:
+        with self._lock:
+            feeds, freqs = self._load()
+            raw = self._load_raw()
+            an = raw.get("auth_notify") or {}
+            an["targets"] = [t for t in targets if t]
+            self._save_with(feeds, freqs, auth_notify=an)
+
+    def all_target_urls(self) -> List[str]:
+        """All unique notification target URLs across all feeds."""
+        feeds, _ = self._load()
+        urls = set()
+        for url_list in feeds.values():
+            urls.update(url_list)
+        return sorted(urls)
+
+    # alias used by scheduler
+    urls = all_target_urls
+
+    def _save_with(self, feeds: dict, freqs: dict, auth_notify: dict = None) -> None:
+        directory = os.path.dirname(self.path) or "."
+        os.makedirs(directory, exist_ok=True)
+        payload = {"feeds": feeds, "frequencies": freqs}
+        if auth_notify is not None:
+            payload["auth_notify"] = auth_notify
+        else:
+            existing = self._load_raw()
+            if "auth_notify" in existing:
+                payload["auth_notify"] = existing["auth_notify"]
+        tmp = self.path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2, sort_keys=True)
+        os.replace(tmp, self.path)

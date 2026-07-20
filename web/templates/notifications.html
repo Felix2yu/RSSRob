@@ -28,6 +28,47 @@
     <div class="notice">{{ send_error }}</div>
   {% endif %}
 
+  <div class="meta" style="margin-bottom:1.2rem;">
+    <div style="font-weight:700; margin-bottom:.5rem;">Token 过期通知</div>
+    <p style="font-size:.85rem; color:var(--muted); margin:0 0 .6rem;">
+      微信公众号或 X/Twitter 登录凭证过期时，自动发送提醒。仅在调度器抓取时检测。</p>
+    <form method="post" action="{{ url_for('save_auth_notify') }}" class="auth-settings">
+      <label style="display:flex; align-items:center; gap:.4rem; cursor:pointer; font-size:.9rem;">
+        <input type="checkbox" name="auth_enabled" {{ 'checked' if auth_notify_enabled else '' }}
+               id="auth-enabled-toggle">
+        启用过期通知
+      </label>
+      <div id="auth-targets-section" style="margin-top:.5rem; {{ '' if auth_notify_enabled else 'display:none' }}">
+        <div style="font-size:.85rem; color:var(--muted); margin-bottom:.3rem;">
+          发送通道（不勾选则发给所有通道）：</div>
+        {% if all_target_urls %}
+          {% for url in all_target_urls %}
+          <label style="display:flex; align-items:center; gap:.35rem; font-size:.88rem; margin:.2rem 0;">
+            <input type="checkbox" name="auth_targets" value="{{ url }}"
+                   {{ 'checked' if not auth_notify_targets or url in auth_notify_targets }}>
+            {{ url }}
+          </label>
+          {% endfor %}
+        {% else %}
+          <span style="font-size:.85rem; color:var(--muted);">暂无通知通道，请先在下方添加。</span>
+        {% endif %}
+      </div>
+      <button type="submit" style="margin-top:.6rem;">保存设置</button>
+    </form>
+  </div>
+
+  <script>
+    (function(){
+      var toggle = document.getElementById('auth-enabled-toggle');
+      var section = document.getElementById('auth-targets-section');
+      if(toggle && section) {
+        toggle.addEventListener('change', function() {
+          section.style.display = toggle.checked ? '' : 'none';
+        });
+      }
+    })();
+  </script>
+
   {% if sites %}
   <form class="add-sub" method="post" action="{{ url_for('add_feed') }}">
     <strong>添加通知目标：</strong>

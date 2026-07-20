@@ -48,10 +48,13 @@ _NOTIFY_PATH = os.path.join("var", "subscribers.json")
 
 
 def _notify_auth_error(service, error):
-    """Send a notification about token expiration to all configured targets."""
+    """Send a notification about token expiration to configured targets."""
     try:
         subs = Subscribers(_NOTIFY_PATH)
-        targets = subs.urls()
+        if not subs.auth_notify_enabled():
+            return
+        explicit = subs.auth_notify_targets()
+        targets = explicit if explicit else subs.all_target_urls()
         if not targets:
             return
         title = "[RSSRob] " + service + " 会话过期"

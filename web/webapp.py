@@ -598,7 +598,21 @@ def notify_list():
                            sent=request.args.get("sent"),
                            sent_items=request.args.get("sent_items"),
                            sent_feeds=request.args.get("sent_feeds"),
-                           send_error=request.args.get("send_error"))
+                           send_error=request.args.get("send_error"),
+                           auth_notify_enabled=SUBS.auth_notify_enabled(),
+                           auth_notify_targets=SUBS.auth_notify_targets(),
+                           all_target_urls=SUBS.all_target_urls())
+
+
+@app.route("/notify-auth-settings", methods=["POST"])
+def save_auth_notify():
+    """Save token-expiry notification settings."""
+    enabled = request.form.get("auth_enabled") == "on"
+    SUBS.set_auth_notify_enabled(enabled)
+    if enabled:
+        targets = request.form.getlist("auth_targets")
+        SUBS.set_auth_notify_targets(targets)
+    return redirect(url_for("notify_list"))
 
 
 @app.route("/send-now", methods=["POST"])
