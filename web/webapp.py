@@ -140,7 +140,7 @@ app = Flask(__name__)
 ADMIN_CRED_PATH = admin_credential.DEFAULT_PATH
 
 # Endpoints reachable without a session (the login/logout/first-run flow + static).
-_PUBLIC_ENDPOINTS = {"login", "logout", "setup", "static"}
+_PUBLIC_ENDPOINTS = {"login", "logout", "setup", "static", "serve_feed"}
 
 
 def _load_admin():
