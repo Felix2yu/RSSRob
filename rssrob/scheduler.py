@@ -4,6 +4,8 @@ import threading
 import time
 
 from .config import normalize_proxy
+from .notify import send_notification
+from .subscribers import Subscribers
 from .fetch import Fetcher
 from .pipeline import run_cycle
 from .twitter import (GraphQlTransport, TwitterAuthError, TwitterClient,
@@ -40,6 +42,23 @@ def build_twitter_client() -> TwitterClient:
                             or (cred.proxy if cred else None))
     return TwitterClient(GraphQlTransport(proxy=proxy), credential=cred,
                          credential_path=TWITTER_CRED_PATH)
+
+
+_NOTIFY_PATH = os.path.join("var", "subscribers.json")
+
+
+def _notify_auth_error(service, error):
+    """Send a notification about token expiration to all configured targets."""
+    try:
+        subs = Subscribers(_NOTIFY_PATH)
+        targets = subs.urls()
+        if not targets:
+            return
+        title = "[RSSRob] " + service + " 会话过期"
+        body = service + " 的登录凭证已过期，请重新登录。\n\n错误信息：" + str(error)
+        send_notification(targets, title, body)
+    except Exception:
+        pass  # best-effort
 
 
 class Scheduler:
@@ -104,9 +123,14 @@ class Scheduler:
                                  wechat_client=wechat_client,
                                  twitter_client=twitter_client)
             log.info("scraped %s: %d new item(s)", site.name, inserted)
-        except (WeChatAuthError, TwitterAuthError) as e:
-            log.warning("session expired for %s: %s — re-run the login command",
+        except WeChatAuthError as e:
+            log.warning("session expired for %s: %s -- re-run wechat-login",
                         site.name, e)
+            _notify_auth_error("微信公众号", e)
+        except TwitterAuthError as e:
+            log.warning("session expired for %s: %s -- re-run twitter-login",
+                        site.name, e)
+            _notify_auth_error("X/Twitter", e)
         except (WeChatRateLimited, TwitterRateLimited) as e:
             self._backoff[site.name] = now + max(site.interval, _RATE_LIMIT_BACKOFF)
             log.warning("rate-limited %s: %s — backing off", site.name, e)
