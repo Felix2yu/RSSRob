@@ -22,6 +22,7 @@ import json
 import os
 import sys
 import threading
+from collections import OrderedDict
 from typing import List
 
 from .article import (DESC_LEN, fetch_article, shorten as _shorten,
@@ -63,7 +64,10 @@ class SentStore:
     def _load(self):
         if os.path.exists(self.path):
             with open(self.path, encoding="utf-8") as f:
-                return json.load(f) or {}
+                try:
+                    return json.load(f) or {}
+                except (json.JSONDecodeError, ValueError):
+                    return {}
         return {}
 
     def _save(self, data):
@@ -133,41 +137,59 @@ def enrich_items(site, items, fetcher) -> List[dict]:
     return entries
 
 
+def _group_by_date(entries: List[dict]) -> OrderedDict:
+    """Group entries by date, newest date first."""
+    grouped = OrderedDict()
+    for e in entries:
+        date = (e["date"] or "未知日期").strip() or "未知日期"
+        grouped.setdefault(date, []).append(e)
+    return grouped
+
+
 def _render_section(title: str, entries: List[dict]) -> tuple:
-    """Render one feed's items as (text_block, html_block)."""
+    """Render one feed's items grouped by date as (text_block, html_block)."""
     n = len(entries)
     plural = "" if n == 1 else "s"
+    grouped = _group_by_date(entries)
 
+    # Text format
     text_lines = [f"{title} — {n} 条更新", ""]
-    for e in entries:
-        date = (e["date"] or "").strip()
-        text_lines.append(f"{('['+date+'] ') if date else ''}{e['title'] or '(无标题)'}")
-        if e["description"]:
-            text_lines.append(f"  {e['description']}")
-        if e["link"]:
-            text_lines.append(f"  {e['link']}")
+    for date, items in grouped.items():
+        text_lines.append(f"【{date}】")
+        for e in items:
+            text_lines.append(f"  {e['title'] or '(无标题)'}")
+            if e["description"]:
+                text_lines.append(f"    {e['description']}")
+            if e["link"]:
+                text_lines.append(f"    {e['link']}")
         text_lines.append("")
     text_block = "\n".join(text_lines)
 
-    rows = []
-    for e in entries:
-        date = _html.escape((e["date"] or "").strip())
-        t = _html.escape(e["title"] or "(无标题)")
-        link = _html.escape(e["link"] or "")
-        head = (f'<a href="{link}" style="color:#0353a4;text-decoration:none">{t}</a>'
-                if link else t)
-        desc = (f'<div style="color:#555;font-size:90%;margin-top:.15rem">'
-                f'{_html.escape(e["description"])}</div>' if e["description"] else "")
-        rows.append(
-            '<tr>'
-            f'<td style="color:#1a7f37;white-space:nowrap;font-size:90%;'
-            f'padding:.45rem 12px .45rem 0;vertical-align:top">{date}</td>'
-            f'<td style="padding:.45rem 0;vertical-align:top">{head}{desc}</td>'
-            '</tr>')
+    # HTML format
+    date_sections = []
+    for date, items in grouped.items():
+        rows = []
+        for e in items:
+            t = _html.escape(e["title"] or "(无标题)")
+            link = _html.escape(e["link"] or "")
+            head = (f'<a href="{link}" style="color:#0353a4;text-decoration:none">{t}</a>'
+                    if link else t)
+            desc = (f'<div style="color:#555;font-size:90%;margin-top:.15rem">'
+                    f'{_html.escape(e["description"])}</div>' if e["description"] else "")
+            rows.append(
+                f'<tr>'
+                f'<td style="padding:.45rem 0;vertical-align:top">{head}{desc}</td>'
+                f'</tr>')
+        date_sections.append(
+            f'<div style="margin:1rem 0 .3rem;font-weight:600;color:#1a7f37;'
+            f'border-bottom:1px solid #e0e0e0;padding-bottom:.2rem">'
+            f'{_html.escape(date)}</div>'
+            f'<table style="border-collapse:collapse;width:100%">{"".join(rows)}</table>')
+
     html_block = (
         f'<h2 style="font-size:1.2rem;margin:0 0 .2rem">{_html.escape(title)}</h2>'
         f'<p style="color:#666;margin:.1rem 0 .8rem">{n} 条更新</p>'
-        f'<table style="border-collapse:collapse;width:100%">{"".join(rows)}</table>')
+        + "".join(date_sections))
     return text_block, html_block
 
 
@@ -217,7 +239,7 @@ def send_feed_digest(site, recipients: List[str], limit: int = 10,
         items = select_new_items(items, site.name, state)
     cap = first_limit if (only_new and first_send) else limit
     items = items[:cap]
-    title = site.title or feed_title or site.name
+    title = site.description or site.title or feed_title or site.name
 
     if not items:
         return {"subject": None, "items": 0, "recipients": recipients,
@@ -271,8 +293,8 @@ def send_subscriber_digest(subscriber, sites, *, limit: int = 10,
         except Exception as e:
             errors.append((site.name, f"{type(e).__name__}: {e}"))
             continue
-        sections.append({"title": site.title or feed_title or site.name,
-                         "entries": entries})
+        title = site.description or site.title or feed_title or site.name
+        sections.append({"title": title, "entries": entries})
         to_mark.append((site.name, [_item_key(it) for it in items]))
 
     if not sections:
