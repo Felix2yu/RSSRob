@@ -119,9 +119,9 @@
       <button type="submit" class="run"{% if ptype not in ('html', 'rss') %} style="display:none"{% endif %}>Run</button>
       <span class="sep"{% if ptype not in ('html', 'rss') %} style="display:none"{% endif %}>or save the current config →</span>
       <input type="text" name="name" value="{{ form_name }}"
-             placeholder="site name (e.g. hfips-tzgg)">
-      <input type="text" name="site_title" value="{{ form_title }}"
-             placeholder="feed title (optional)">
+             placeholder="site name (e.g. suzhou-tourism)">
+      <input type="text" name="description" value="{{ form_description }}"
+             placeholder="display name (e.g. 苏州旅游最新资讯)">
       <button type="submit" class="save" formmethod="post"
               formaction="{{ url_for('save') }}">Save to config</button>
       {% if editing_existing %}

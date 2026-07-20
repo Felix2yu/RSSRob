@@ -692,7 +692,7 @@ def playground():
     field = request.args.get("field", flt.field_name if flt and flt.field_name else "title")
     regex = request.args.get("regex") == "on" or bool(editing and flt and flt.regex)
     form_name = request.args.get("name") or (site.name if editing and site else "")
-    form_title = request.args.get("site_title") or (site.title if editing and site else "")
+    form_description = request.args.get("description") or (site.description if editing and site else "")
 
     # wechat/twitter have no live preview (they need their API clients), so the
     # form is config-only for those types.
@@ -721,7 +721,7 @@ def playground():
         "playground.html",
         sites=sites, active=None,
         form=form, ptype=ptype, include=include, exclude=exclude, field=field, regex=regex,
-        form_name=form_name, form_title=form_title, editing_existing=bool(editing and site),
+        form_name=form_name, form_description=form_description, editing_existing=bool(editing and site),
         results=results, error=error, source=source, total=total, kept_n=kept_n,
         saved=request.args.get("saved"), save_error=request.args.get("save_error"),
     )
@@ -748,8 +748,8 @@ def _form_params(src):
 # Keys the playground form controls. When updating an existing feed these are
 # replaced from the form; every other saved key (max_items, interval,
 # max_age_days, user_agent, …) is preserved so editing never silently drops it.
-_FORM_KEYS = {"name", "type", "url", "item", "fields", "title", "proxy", "filter",
-              "article", "account_id", "account_name", "username"}
+_FORM_KEYS = {"name", "type", "url", "item", "fields", "title", "description", "proxy",
+              "filter", "article", "account_id", "account_name", "username"}
 
 
 def _load_existing_site(save_path, name):
@@ -837,9 +837,9 @@ def save():
             if asel:
                 site["article"] = {"content": asel}
 
-    site_title = (request.form.get("site_title") or "").strip()
-    if site_title:
-        site["title"] = site_title
+    site_description = (request.form.get("description") or "").strip()
+    if site_description:
+        site["description"] = site_description
 
     proxy = normalize_proxy(request.form.get("proxy"))
     if proxy:
