@@ -16,6 +16,6 @@ RUN groupadd -g 1000 rssrob \
 
 USER rssrob
 
-EXPOSE 8080
+EXPOSE 8080 5000
 
 ENTRYPOINT ["python", "-m", "rssrob"]
