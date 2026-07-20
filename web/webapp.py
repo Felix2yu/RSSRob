@@ -90,6 +90,12 @@ def _save_path():
     return str(REPO_ROOT / "config.yaml")
 
 
+def _sites_yaml_path():
+    """Return configs/sites.yaml path if it exists, else None."""
+    p = REPO_ROOT / "configs" / "sites.yaml"
+    return str(p) if p.is_file() else None
+
+
 # Live fetch falls back to these saved copies (keyed by url) on a network error,
 # so the preview keeps working offline. (Saved pages live in samples/.)
 FALLBACK_FILES = {
@@ -714,6 +720,12 @@ def _load_existing_site(save_path, name):
     """Return the raw saved dict for feed ``name``, or None. Folder mode: the
     one file per feed (falls back to scanning all yaml files). Single-file: the
     entry in ``sites``."""
+    sites_yaml = _sites_yaml_path()
+    if sites_yaml:
+        raw = _load_raw(sites_yaml)
+        for s in (raw.get("sites") or []) if raw else []:
+            if s.get("name") == name:
+                return s
     if os.path.isdir(save_path):
         files = [Path(save_path) / (re.sub(r"[^\w.-]", "-", name) + ".yaml")]
         files += list(Path(save_path).glob("*.yaml")) + list(Path(save_path).glob("*.yml"))
@@ -817,7 +829,20 @@ def save():
         site = {**{k: v for k, v in existing.items() if k not in _FORM_KEYS}, **site}
 
     try:
-        if os.path.isdir(path):
+        sites_yaml = _sites_yaml_path()
+        if sites_yaml:
+            # sites.yaml mode: upsert into configs/sites.yaml
+            raw = _load_raw(sites_yaml) or {}
+            sites = raw.setdefault("sites", [])
+            for i, s in enumerate(sites):
+                if s.get("name") == name:
+                    sites[i] = site
+                    break
+            else:
+                sites.append(site)
+            with open(sites_yaml, "w", encoding="utf-8") as f:
+                yaml.safe_dump(raw, f, allow_unicode=True, sort_keys=False)
+        elif os.path.isdir(path):
             # folder mode: one file per feed (config/<name>.yaml)
             fname = re.sub(r"[^\w.-]", "-", name) + ".yaml"
             with open(os.path.join(path, fname), "w", encoding="utf-8") as f:
@@ -893,9 +918,22 @@ def _safe_sites():
 
 
 def _write_site(site):
-    """Persist one feed dict to the config (folder: one file; else upsert)."""
+    """Persist one feed dict to the config (sites.yaml; folder: one file; else upsert)."""
     name = site["name"]
     path = _save_path()
+    sites_yaml = _sites_yaml_path()
+    if sites_yaml:
+        raw = _load_raw(sites_yaml) or {}
+        sites = raw.setdefault("sites", [])
+        for i, s in enumerate(sites):
+            if s.get("name") == name:
+                sites[i] = site
+                break
+        else:
+            sites.append(site)
+        with open(sites_yaml, "w", encoding="utf-8") as f:
+            yaml.safe_dump(raw, f, allow_unicode=True, sort_keys=False)
+        return sites_yaml
     if os.path.isdir(path):
         fname = re.sub(r"[^\w.-]", "-", name) + ".yaml"
         out = os.path.join(path, fname)
@@ -919,12 +957,23 @@ def _write_site(site):
 
 
 def _delete_site_files(save_path, name) -> bool:
-    """Remove feed ``name`` from the config (folder: drop it from / delete the
-    owning file; single file: drop it from ``sites``). Returns True if found.
-
-    The inverse of ``_write_site``: a single-site file (top-level ``name``) is
-    deleted outright; a ``sites:`` file has the entry removed (and the file
-    deleted if it then holds nothing but that one feed)."""
+    """Remove feed ``name`` from the config (sites.yaml; folder: drop it from /
+    delete the owning file; single file: drop it from ``sites``). Returns True
+    if found."""
+    sites_yaml = _sites_yaml_path()
+    if sites_yaml:
+        raw = _load_raw(sites_yaml) or {}
+        sites = raw.get("sites") or []
+        kept = [s for s in sites if s.get("name") != name]
+        if len(kept) == len(sites):
+            return False
+        if kept:
+            raw["sites"] = kept
+            with open(sites_yaml, "w", encoding="utf-8") as f:
+                yaml.safe_dump(raw, f, allow_unicode=True, sort_keys=False)
+        else:
+            Path(sites_yaml).unlink()
+        return True
     if os.path.isdir(save_path):
         removed = False
         files = list(Path(save_path).glob("*.yaml")) + list(Path(save_path).glob("*.yml"))

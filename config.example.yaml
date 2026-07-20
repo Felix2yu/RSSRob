@@ -1,36 +1,10 @@
 output_dir: ./var/feeds
 state_db: ./var/rssrob.db
 http:
-  host: 127.0.0.1
+  host: 0.0.0.0
   port: 8080
 defaults:
   interval: 1800
   max_items: 50
   timeout: 20
   user_agent: "RSSRob/0.1"
-
-sites:
-  # HTML site: select the 通知公告 block by its heading (XPath required for text match)
-  - name: ipp-notices
-    type: html
-    url: http://www.ipp.cas.cn/
-    title: "IPP 通知公告"
-    item: "xpath://h2[normalize-space()='通知公告']/ancestor::div[contains(@class,'ipp2020-item')][1]//div[@class='bd']//ul/li"
-    fields:
-      title: "xpath:.//a"
-      link: "xpath:.//a/@href"
-      date: "xpath:.//span"
-
-  # RSS site: just point at the feed; title/description inherited from the source
-  - name: python-insider
-    type: rss
-    url: https://blog.python.org/feeds/posts/default
-    interval: 3600
-
-  # Twitter/X account: needs a saved X session cookie (rssrob twitter-login)
-  - name: elon
-    type: twitter
-    username: elonmusk
-    interval: 1800
-    max_items: 30
-    # proxy: 7890        # optional; X often needs a proxy

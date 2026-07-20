@@ -1,0 +1,24 @@
+- name: ipp-notices
+  type: html
+  description: "IPP 通知公告"
+  url: http://www.ipp.cas.cn/
+  title: "IPP 通知公告"
+  item: "xpath://h2[normalize-space()='通知公告']/ancestor::div[contains(@class,'ipp2020-item')][1]//div[@class='bd']//ul/li"
+  fields:
+    title: "xpath:.//a"
+    link: "xpath:.//a/@href"
+    date: "xpath:.//span"
+
+- name: python-insider
+  type: rss
+  description: "Python Insider 官方博客"
+  url: https://blog.python.org/feeds/posts/default
+  interval: 3600
+
+- name: elon
+  type: twitter
+  description: "Elon Musk 推特"
+  username: elonmusk
+  interval: 1800
+  max_items: 30
+  # proxy: 7890
