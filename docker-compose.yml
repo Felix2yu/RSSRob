@@ -3,7 +3,6 @@ services:
     build: .
     container_name: rssrob
     ports:
-      - "8080:8080"
       - "5000:5000"
     volumes:
       - ./configs:/app/configs

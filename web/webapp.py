@@ -450,6 +450,20 @@ def index():
     )
 
 
+@app.route("/feeds/<name>.xml")
+def serve_feed(name):
+    try:
+        output_dir = Path(load_config(_config_path()).output_dir)
+    except Exception:
+        output_dir = REPO_ROOT / "var" / "feeds"
+    if not output_dir.is_absolute():
+        output_dir = REPO_ROOT / output_dir
+    xml_file = output_dir / f"{name}.xml"
+    if not xml_file.is_file():
+        abort(404, description=f"feed not found: {name}")
+    return send_file(xml_file, mimetype="application/rss+xml; charset=utf-8")
+
+
 @app.route("/enrich", methods=["POST"])
 def enrich_items():
     """Lazy-fill full titles + descriptions for a site's html items.

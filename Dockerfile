@@ -18,6 +18,6 @@ COPY docker-entrypoint.sh ./
 
 USER rssrob
 
-EXPOSE 8080 5000
+EXPOSE 5000
 
 ENTRYPOINT ["./docker-entrypoint.sh"]
