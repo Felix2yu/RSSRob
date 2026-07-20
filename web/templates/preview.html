@@ -41,8 +41,20 @@
   <form class="subscribe" method="post" action="{{ url_for('subscribe') }}">
     <input type="hidden" name="site" value="{{ site.name }}">
     <span class="sub-label">📡 添加通知目标：</span>
-    <input type="text" name="notify_url" placeholder="tgram://bot_token/chat_id" required
-           style="flex:2; min-width:280px;">
+    {% if saved_targets %}
+    <select name="notify_url" class="target-select" onchange="toggleCustomUrl(this)" required>
+      <option value="" disabled selected>选择已保存的目标…</option>
+      {% for t in saved_targets %}
+        <option value="{{ t.url }}">{{ t.name }} ({{ t.url[:30] }}{% if t.url|length > 30 %}…{% endif %})</option>
+      {% endfor %}
+      <option value="__custom__">+ 手动输入新地址</option>
+    </select>
+    {% endif %}
+    <input type="text" name="notify_url" id="custom-url"
+           placeholder="tgram://bot_token/chat_id"
+           style="flex:2; min-width:280px;{% if saved_targets %} display:none;{% endif %}">
+    <input type="text" name="notify_name" id="target-name" placeholder="名称（可选，保存到地址簿）"
+           style="flex:1; min-width:150px; display:none;">
     <span class="freq">每 <input type="number" name="hours" value="24" min="1" step="1"> 小时</span>
     <button type="submit">订阅</button>
     {% if subscriber_count %}
@@ -50,6 +62,19 @@
         {{ subscriber_count }} 个通知目标</a>
     {% endif %}
   </form>
+  <script>
+  function toggleCustomUrl(sel) {
+    var custom = document.getElementById('custom-url');
+    var nameInput = document.getElementById('target-name');
+    if (sel.value === '__custom__') {
+      custom.style.display = '';
+      custom.required = true;
+      sel.required = false;
+      sel.style.display = 'none';
+      if (nameInput) nameInput.style.display = '';
+    }
+  }
+  </script>
 
   {% if show_subs %}
     <div class="sub-list">

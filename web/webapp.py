@@ -55,6 +55,7 @@ from rssrob.rss import parse_feed
 from rssrob.scheduler import Scheduler, build_twitter_client, build_wechat_client
 from rssrob.store import Store
 from rssrob.subscribers import Subscribers
+from rssrob.notification_targets import NotificationTargets
 from rssrob.twitter import X_LOGIN_URL, TwitterAuthError
 from rssrob.twitter_credential import DEFAULT_PATH as TWITTER_CRED_PATH
 from rssrob.twitter_credential import credential_from_cookie
@@ -113,6 +114,7 @@ _ITEM_CACHE: dict = {}         # url -> (full_title, description) cached across 
 PROXY_URL = os.environ.get("RSSROB_PROXY") or None
 
 # Per-feed notification target list (gitignored).
+NOTIF_TARGETS = NotificationTargets(str(REPO_ROOT / "var" / "notification_targets.json"))
 SUBS = Subscribers(str(REPO_ROOT / "var" / "subscribers.json"))
 
 
@@ -462,6 +464,7 @@ def index():
         show_subs=bool(request.args.get("show_subs")),
         subscribed=request.args.get("subscribed"),
         sub_error=request.args.get("sub_error"),
+        saved_targets=NOTIF_TARGETS.list(),
     )
 
 
@@ -546,10 +549,14 @@ def subscribe():
     """Add a notification target to a feed's subscriber list."""
     site = (request.form.get("site") or "").strip()
     notify_url = (request.form.get("notify_url") or "").strip()
+    notify_name = (request.form.get("notify_name") or "").strip()
     if not site:
         abort(400, description="missing feed")
     hours = request.form.get("hours") or 24
     status = SUBS.add(site, notify_url, hours)
+    # Auto-save new target to address book if name provided
+    if notify_name and notify_url and status == "added":
+        NOTIF_TARGETS.add(notify_name, notify_url)
     if status == "added":
         return redirect(url_for("index", site=site, subscribed=notify_url, show_subs=1))
     msg = "已存在" if status == "exists" else "请输入有效的通知地址（如 tgram://bot_token/chat_id）"
@@ -639,6 +646,38 @@ def add_feed():
     if status == "invalid":
         return redirect(url_for("notify_list", add_error="请输入有效的通知地址"))
     return redirect(url_for("notify_list", added=notify_url))
+
+
+# --- Saved notification targets (address book) ----------------------------
+
+@app.route("/notifications/targets")
+def manage_targets():
+    """Manage saved notification targets (address book)."""
+    return render_template("manage_targets.html", targets=NOTIF_TARGETS.list(),
+                           active=None,
+                           added=request.args.get("added"),
+                           add_error=request.args.get("add_error"),
+                           removed=request.args.get("removed"))
+
+
+@app.route("/notifications/targets/add", methods=["POST"])
+def add_target():
+    """Add a saved notification target."""
+    name = (request.form.get("name") or "").strip()
+    url = (request.form.get("url") or "").strip()
+    status = NOTIF_TARGETS.add(name, url)
+    if status == "added":
+        return redirect(url_for("manage_targets", added=name))
+    msg = "该地址已存在" if status == "exists" else "请输入名称和有效的通知地址"
+    return redirect(url_for("manage_targets", add_error=msg))
+
+
+@app.route("/notifications/targets/remove", methods=["POST"])
+def remove_target():
+    """Remove a saved notification target."""
+    url = (request.form.get("url") or "").strip()
+    NOTIF_TARGETS.remove(url)
+    return redirect(url_for("manage_targets", removed=url))
 
 
 @app.route("/playground")

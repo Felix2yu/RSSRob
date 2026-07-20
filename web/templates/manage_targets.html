@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}通知地址簿 · RSSRob{% endblock %}
+{% block content %}
+
+  <h1 style="margin:.2rem 0 .1rem; font-size:1.25rem;">通知地址簿</h1>
+  <p class="count">保存常用通知地址，订阅时直接选择，无需每次输入。</p>
+
+  {% if added %}
+    <div class="ok-banner">✓ 已添加 <strong>{{ added }}</strong>。</div>
+  {% endif %}
+  {% if add_error %}
+    <div class="notice">{{ add_error }}</div>
+  {% endif %}
+  {% if removed %}
+    <div class="ok-banner">✓ 已移除 <strong>{{ removed }}</strong>。</div>
+  {% endif %}
+
+  <form class="add-target" method="post" action="{{ url_for('add_target') }}">
+    <input type="text" name="name" placeholder="名称（如 Telegram 群组）" required
+           style="flex:1; min-width:150px;">
+    <input type="text" name="url" placeholder="通知地址（如 tgram://bot_token/chat_id）" required
+           style="flex:2; min-width:300px;">
+    <button type="submit">添加</button>
+  </form>
+
+  {% if targets %}
+  <table>
+    <thead><tr><th>名称</th><th>通知地址</th><th></th></tr></thead>
+    <tbody>
+      {% for t in targets %}
+      <tr>
+        <td><strong>{{ t.name }}</strong></td>
+        <td style="font-family:monospace;font-size:.85rem;">{{ t.url }}</td>
+        <td>
+          <form method="post" action="{{ url_for('remove_target') }}" style="display:inline;">
+            <input type="hidden" name="url" value="{{ t.url }}">
+            <button type="submit" class="del-btn"
+                    onclick="return confirm('移除此通知地址？')">删除</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <div class="notice">暂无保存的通知地址。添加后可在订阅时直接选择。</div>
+  {% endif %}
+
+  <style>
+    .ok-banner { border-left:4px solid var(--green); background:#dafbe1; color:#1a4d2e;
+      padding:.6rem .9rem; border-radius:6px; margin:1rem 0; font-size:.9rem; }
+    form.add-target { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap;
+      background:var(--bg); border:1px solid var(--line); border-radius:10px;
+      padding:.6rem .9rem; margin:1rem 0; font-size:.9rem; }
+    form.add-target input[type=text] { padding:.4rem .55rem; border:1px solid var(--line);
+      border-radius:7px; font-size:.9rem; }
+    form.add-target button { background:var(--accent); color:#fff; border:0;
+      padding:.45rem 1.1rem; border-radius:7px; cursor:pointer; }
+    .del-btn { background:none; border:1px solid var(--line); border-radius:7px;
+      padding:.25rem .6rem; font-size:.82rem; cursor:pointer; color:#B42A2E; }
+    .del-btn:hover { border-color:#B42A2E; background:#FCECEC; }
+  </style>
+
+{% endblock %}

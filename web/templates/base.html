@@ -229,6 +229,9 @@
         <a href="{{ url_for('notify_list') }}" class="{{ 'active' if request.endpoint == 'notify_list' }}">
           <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5a5 5 0 0 1 5 5v2.5l1.5 1.5H1.5L3 9V6.5a5 5 0 0 1 5-5z"/><path d="M6.5 12.5a1.5 1.5 0 0 0 3 0"/></svg>
           <span>通知</span></a>
+        <a href="{{ url_for('manage_targets') }}" class="{{ 'active' if request.endpoint == 'manage_targets' }}">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="M5 6h6M5 8h4M5 10h5"/></svg>
+          <span>地址簿</span></a>
         <a href="{{ url_for('wechat_login') }}" class="{{ 'active' if request.endpoint == 'wechat_login' }}">
           <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3.5h10a1.5 1.5 0 0 1 1.5 1.5v4.5A1.5 1.5 0 0 1 13 11H7.5L4.5 13.5V11H3a1.5 1.5 0 0 1-1.5-1.5V5A1.5 1.5 0 0 1 3 3.5Z"/></svg>
           <span>微信</span></a>
