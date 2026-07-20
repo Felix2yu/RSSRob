@@ -51,7 +51,7 @@
   {% if show_subs %}
     <div class="sub-list">
       <div class="sub-list-head">
-        Subscribers for <strong>{{ site.name }}</strong> ({{ subscriber_count }})
+        Subscribers for <strong>{{ site.description or site.title or site.name }}</strong> ({{ subscriber_count }})
         <a href="{{ url_for('index', site=site.name) }}">hide</a>
       </div>
       {% if subscribers %}

@@ -14,7 +14,7 @@ def build_feed(site: Site, items) -> bytes:
     channel_link = site.url or "https://mp.weixin.qq.com/"
     fg = FeedGenerator()
     fg.id(channel_id)
-    fg.title(site.title or site.name)
+    fg.title(site.title or site.description or site.name)
     fg.link(href=channel_link, rel="alternate")
     fg.description(site.description or site.title or site.name)
     for it in items:
