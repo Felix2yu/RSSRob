@@ -796,7 +796,13 @@ def _load_existing_site(save_path, name):
     sites_yaml = _sites_yaml_path()
     if sites_yaml:
         raw = _load_raw(sites_yaml)
-        for s in (raw.get("sites") or []) if raw else []:
+        if isinstance(raw, list):
+            sites = raw
+        elif isinstance(raw, dict):
+            sites = raw.get("sites") or []
+        else:
+            sites = []
+        for s in sites:
             if s.get("name") == name:
                 return s
     if os.path.isdir(save_path):
@@ -1048,15 +1054,22 @@ def _delete_site_files(save_path, name) -> bool:
     if found."""
     sites_yaml = _sites_yaml_path()
     if sites_yaml:
-        raw = _load_raw(sites_yaml) or {}
-        sites = raw.get("sites") or []
+        raw = _load_raw(sites_yaml)
+        if isinstance(raw, list):
+            sites = raw
+        elif isinstance(raw, dict):
+            sites = raw.get("sites") or []
+        else:
+            sites = []
         kept = [s for s in sites if s.get("name") != name]
         if len(kept) == len(sites):
             return False
         if kept:
-            raw["sites"] = kept
+            if isinstance(raw, dict):
+                raw["sites"] = kept
             with open(sites_yaml, "w", encoding="utf-8") as f:
-                yaml.safe_dump(raw, f, allow_unicode=True, sort_keys=False)
+                yaml.safe_dump(kept if isinstance(raw, list) else raw, f,
+                               allow_unicode=True, sort_keys=False)
         else:
             Path(sites_yaml).unlink()
         return True
