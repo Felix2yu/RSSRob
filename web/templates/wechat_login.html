@@ -103,7 +103,7 @@ document.getElementById("search-btn").addEventListener("click", async () => {
       "<div><b>" + (a.name || "(unnamed)") + "</b></div>" +
       (a.desc ? "<div class='count'>" + a.desc + "</div>" : "") +
       "<div style='margin-top:.5rem;'>" +
-      "订阅源名称：<input class='fn' placeholder='feed-id' style='padding:.3rem;border:1px solid var(--line);border-radius:5px;'> " +
+      "订阅源名称：<input class='fn' value='" + esc(a.id) + "' placeholder='feed-id' style='padding:.3rem;border:1px solid var(--line);border-radius:5px;'> " +
       "<button class='save'>保存为订阅源</button> <span class='saved'></span></div>";
     row.querySelector(".save").addEventListener("click", async () => {
       const feed = row.querySelector(".fn").value.trim();
