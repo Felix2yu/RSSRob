@@ -70,6 +70,55 @@ pip install -r requirements.txt
 
 ---
 
+## Docker
+
+### 构建镜像
+
+```bash
+docker build -t rssrob .
+```
+
+### 运行
+
+将配置和数据目录挂载到容器中：
+
+```bash
+docker run -d \
+  --name rssrob \
+  -p 8080:8080 \
+  -v $(pwd)/configs:/app/configs \
+  -v $(pwd)/var:/app/var \
+  rssrob serve
+```
+
+HTTP 服务器在容器内监听 `0.0.0.0:8080`，可按需修改端口映射（`-p`）。
+
+### Docker Compose
+
+创建 `docker-compose.yml`：
+
+```yaml
+services:
+  rssrob:
+    build: .
+    container_name: rssrob
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./configs:/app/configs
+      - ./var:/app/var
+    restart: unless-stopped
+```
+
+然后运行：
+
+```bash
+docker compose up -d
+docker compose logs -f    # 查看启动日志
+```
+
+---
+
 ## 快速开始
 
 1. 创建一个 `config.yaml`（见 [配置](#配置)）：

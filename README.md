@@ -70,6 +70,55 @@ pip install -r requirements.txt
 
 ---
 
+## Docker
+
+### Build the image
+
+```bash
+docker build -t rssrob .
+```
+
+### Run
+
+Mount your config and data directories into the container:
+
+```bash
+docker run -d \
+  --name rssrob \
+  -p 8080:8080 \
+  -v $(pwd)/configs:/app/configs \
+  -v $(pwd)/var:/app/var \
+  rssrob serve
+```
+
+The HTTP server listens on `0.0.0.0:8080` inside the container. Change the port mapping (`-p`) as needed.
+
+### Docker Compose
+
+Create a `docker-compose.yml`:
+
+```yaml
+services:
+  rssrob:
+    build: .
+    container_name: rssrob
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./configs:/app/configs
+      - ./var:/app/var
+    restart: unless-stopped
+```
+
+Then run:
+
+```bash
+docker compose up -d
+docker compose logs -f    # watch startup output
+```
+
+---
+
 ## Quick start
 
 1. Create a `config.yaml` (see [Configuration](#configuration)):
