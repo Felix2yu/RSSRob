@@ -37,7 +37,7 @@ class Store:
         for item in items:
             if not item.id:
                 continue
-            published = _parse_date(item.date)
+            published = _parse_date(item.date, now)
             cur.execute(
                 "INSERT OR IGNORE INTO items "
                 "(feed, id, title, link, summary, published, first_seen) "
@@ -83,10 +83,23 @@ class Store:
         self.conn.close()
 
 
-def _parse_date(raw: Optional[str]) -> Optional[float]:
+def _parse_date(raw: Optional[str], now: float = None) -> Optional[float]:
+    """Parse a date string. If the parsed result has no time component
+    (midnight), replace it with `now` (the fetch timestamp) so that
+    date-only strings like '2026-07-16' get a realistic time."""
     if not raw:
         return None
     try:
-        return dateparser.parse(raw).timestamp()
+        dt = dateparser.parse(raw)
+        if dt is None:
+            return None
+        # If time is exactly midnight (date-only string), use the fetch time
+        if dt.hour == 0 and dt.minute == 0 and dt.second == 0 and dt.microsecond == 0:
+            if now is not None:
+                from datetime import datetime
+                fetch_dt = datetime.fromtimestamp(now, tz=dt.tzinfo)
+                dt = dt.replace(hour=fetch_dt.hour, minute=fetch_dt.minute,
+                                second=fetch_dt.second, microsecond=fetch_dt.microsecond)
+        return dt.timestamp()
     except (ValueError, OverflowError, TypeError):
         return None
