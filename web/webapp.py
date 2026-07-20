@@ -217,12 +217,6 @@ def logout():
 def setup():
     if _load_admin() is not None:                     # first-run only
         return redirect(url_for("login"))
-    if not _is_loopback():
-        return render_template(
-            "error.html",
-            message="set the admin password locally: run "
-                    "`rssrob set-admin-password` on the host, or open this "
-                    "page from localhost."), 403
     error = None
     if request.method == "POST":
         username = (request.form.get("username") or "").strip() or "admin"
