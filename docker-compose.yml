@@ -2,19 +2,8 @@ services:
   rssrob:
     build: .
     container_name: rssrob
-    command: serve
     ports:
       - "8080:8080"
-    volumes:
-      - ./configs:/app/configs
-      - ./var:/app/var
-    restart: unless-stopped
-
-  web:
-    build: .
-    container_name: rssrob-web
-    command: python web/webapp.py --host 0.0.0.0 --port 5000
-    ports:
       - "5000:5000"
     volumes:
       - ./configs:/app/configs

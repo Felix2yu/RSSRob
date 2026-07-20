@@ -14,8 +14,10 @@ RUN groupadd -g 1000 rssrob \
     && mkdir -p configs var/feeds \
     && chown -R rssrob:rssrob /app
 
+COPY docker-entrypoint.sh ./
+
 USER rssrob
 
 EXPOSE 8080 5000
 
-ENTRYPOINT ["python", "-m", "rssrob"]
+ENTRYPOINT ["./docker-entrypoint.sh"]
