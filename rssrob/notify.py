@@ -7,6 +7,7 @@ Apprise uses URL-based configuration. Examples:
     mailto://user:pass@smtp_host     # Email via SMTP
     json://localhost                 # HTTP JSON webhook
     gotify://gotify.example.com/token  # Gotify
+    ntfys://ntfy.example.com/topic    # ntfy
 
 Usage:
     import apprise
@@ -39,7 +40,7 @@ def send_notification(urls, title: str, body: str, body_html: str = None) -> Non
         a.add(url)
     kwargs = {"title": title, "body": body}
     if body_html:
-        kwargs["body_type"] = _apprise.NOTIFY_FORMAT_HTML
+        kwargs["body_format"] = _apprise.NotifyFormat.HTML
         kwargs["body"] = body_html
     result = a.notify(**kwargs)
     if not result:
