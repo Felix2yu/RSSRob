@@ -1,0 +1,10 @@
+services:
+  rssrob:
+    build: .
+    container_name: rssrob
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./configs:/app/configs
+      - ./var:/app/var
+    restart: unless-stopped
