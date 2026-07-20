@@ -37,6 +37,42 @@
       --sans: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial,
               "PingFang SC", "Microsoft YaHei", sans-serif;
     }
+
+    /* ── Dark theme ─────────────────────────────────────────────────────── */
+    [data-theme="dark"] {
+      --ink:        #0D1518;
+      --ink-soft:   #152228;
+      --ink-line:   #1E3038;
+      --rail-fg:    #B0C4C8;
+      --rail-muted: #5A7478;
+
+      --canvas:     #0E1416;
+      --card:       #162024;
+      --signal:     #FF8040;
+      --live:       #2ED8A4;
+
+      --fg:         #D4DFE1;
+      --muted:      #7A9098;
+      --line:       #253540;
+      --bg:         #1A2830;
+      --accent:     #FF8A4F;
+      --green:      #2ED8A4;
+      --amber:      #E8B830;
+
+      --shadow:     0 1px 2px rgba(0,0,0,.25), 0 6px 24px -12px rgba(0,0,0,.55);
+    }
+    [data-theme="dark"] .channels {
+      background: rgba(14,20,22,.88); }
+    [data-theme="dark"] tbody tr:hover { background: #1A2830; }
+    [data-theme="dark"] th { background: #141E22; }
+    [data-theme="dark"] td.t a { color: var(--fg); }
+    [data-theme="dark"] code, [data-theme="dark"] .meta code { color: #A8C0C8; }
+    [data-theme="dark"] .badge.live { background: #0E3A2C; color: #2ED8A4; }
+    [data-theme="dark"] .badge.saved { background: #302800; color: #E8B830; }
+    [data-theme="dark"] .notice { background: #2A2000; color: #E8C850; }
+    [data-theme="dark"] .error { background: #2A0E10; color: #F07070; }
+    [data-theme="dark"] .chan:hover { border-color: #3A5060; }
+    [data-theme="dark"] a { color: var(--accent); }
     * { box-sizing: border-box; }
     html { -webkit-text-size-adjust: 100%; }
     body { margin: 0; background: var(--canvas); color: var(--fg);
@@ -254,6 +290,11 @@
           </form>
         </div>
         {% endif %}
+        <div class="theme-switcher" style="display:flex;gap:.15rem;margin-bottom:.5rem;">
+          <button class="theme-btn" data-set-theme="light" title="亮色" style="background:none;border:1px solid var(--ink-line);color:var(--rail-muted);padding:.25rem .45rem;border-radius:6px;font-size:.75rem;cursor:pointer;line-height:1;">☀</button>
+          <button class="theme-btn" data-set-theme="dark" title="暗色" style="background:none;border:1px solid var(--ink-line);color:var(--rail-muted);padding:.25rem .45rem;border-radius:6px;font-size:.75rem;cursor:pointer;line-height:1;">☾</button>
+          <button class="theme-btn" data-set-theme="system" title="跟随系统" style="background:none;border:1px solid var(--ink-line);color:var(--rail-muted);padding:.25rem .45rem;border-radius:6px;font-size:.75rem;cursor:pointer;line-height:1;">⚙</button>
+        </div>
         <div><span class="pulse" aria-hidden="true"></span><span class="on">引擎运行中</span></div>
         <div>rssrob · 管道</div>
       </div>
@@ -287,5 +328,41 @@
         · <code>rssrob.pipeline.obtain_items</code></footer>
     </main>
   </div>
+  <script>
+    (function() {
+      var root = document.documentElement;
+      var KEY = 'rssrob-theme';
+      var mql = window.matchMedia('(prefers-color-scheme: dark)');
+
+      function apply(theme) {
+        if (theme === 'system') {
+          root.removeAttribute('data-theme');
+          root.dataset.theme = mql.matches ? 'dark' : 'light';
+        } else {
+          root.dataset.theme = theme;
+        }
+        document.querySelectorAll('.theme-btn').forEach(function(b) {
+          var active = b.dataset.setTheme === theme;
+          b.style.borderColor = active ? 'var(--signal)' : 'var(--ink-line)';
+          b.style.color = active ? 'var(--signal)' : 'var(--rail-muted)';
+        });
+      }
+
+      var saved = localStorage.getItem(KEY) || 'system';
+      apply(saved);
+
+      mql.addEventListener('change', function() {
+        if ((localStorage.getItem(KEY) || 'system') === 'system') apply('system');
+      });
+
+      document.querySelectorAll('.theme-btn').forEach(function(b) {
+        b.addEventListener('click', function() {
+          var t = b.dataset.setTheme;
+          localStorage.setItem(KEY, t);
+          apply(t);
+        });
+      });
+    })();
+  </script>
 </body>
 </html>
