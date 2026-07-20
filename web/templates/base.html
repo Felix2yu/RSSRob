@@ -262,7 +262,7 @@
         <span class="channels-label">channels</span>
         {% for s in sites %}
           <a class="chan {{ 'active' if s.name == active else '' }}"
-             href="{{ url_for('index', site=s.name) }}">
+             href="{{ url_for('playground', site=s.name, edit='1') }}">
             <span class="chan-type">{{ s.type }}</span>{{ s.description or s.title or s.name }}
           </a>
         {% endfor %}
