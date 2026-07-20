@@ -18,6 +18,8 @@
          title="编辑此订阅的配置">✎ 编辑</a>
       <button type="button" class="btn-edit" title="立即抓取"
               onclick="runNow(this, '{{ url_for('run_now', name=site.name) }}')">▶ 立即抓取</button>
+      <a class="btn-edit" href="{{ url_for('serve_feed', name=site.name) }}"
+         title="订阅此 RSS 源" target="_blank">📡 订阅</a>
       <span id="run-status" style="font-size:.85rem;color:var(--muted);"></span>
     </div>
   </div>
