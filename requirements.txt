@@ -1,8 +1,16 @@
-requests
-lxml
+# Core dependencies
+requests>=2.33.0
+urllib3>=2.7.0
+lxml>=6.1.0
 cssselect
 feedgen
 pyyaml
 feedparser
 qrcode
 apprise
+
+# Web UI dependencies (Flask management interface)
+flask>=3.1.2
+gunicorn>=23.0.0
+cryptography>=44.0.0
+pyopenssl>=26.0.0

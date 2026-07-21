@@ -124,7 +124,7 @@
         </td>
         <td>
           <form method="post" action="{{ url_for('send_now') }}"
-                onsubmit="return confirm('立即向 {{ target }} 发送其订阅源的新条目？')">
+                onsubmit="return confirm('立即向 ' + {{ target | tojson }} + ' 发送其订阅源的新条目？')">
             <input type="hidden" name="notify_url" value="{{ target }}">
             <button type="submit" class="send-now"
                     title="立即向 {{ target }} 发送新条目">立即发送</button>

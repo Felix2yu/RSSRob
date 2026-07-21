@@ -8,7 +8,7 @@ import yaml
 
 def _load_webapp():
     root = Path(__file__).resolve().parent.parent
-    spec = importlib.util.spec_from_file_location("webapp", root / "web" / "webapp.py")
+    spec = importlib.util.spec_from_file_location("webapp", root / "rssrob" / "webapp.py")
     m = importlib.util.module_from_spec(spec)
     sys.modules["webapp"] = m
     spec.loader.exec_module(m)
@@ -19,6 +19,7 @@ def _load_webapp():
 
 def test_delete_removes_single_site_file(tmp_path):
     wa = _load_webapp()
+    wa.REPO_ROOT = tmp_path  # point to temp dir so _sites_yaml_path() returns None
     d = tmp_path / "configs"; d.mkdir()
     (d / "00-settings.yaml").write_text("output_dir: ./var/feeds\n", encoding="utf-8")
     (d / "oa.yaml").write_text("name: oa\ntype: rss\nurl: http://a/\n", encoding="utf-8")
@@ -29,6 +30,7 @@ def test_delete_removes_single_site_file(tmp_path):
 
 def test_delete_from_sites_list_file(tmp_path):
     wa = _load_webapp()
+    wa.REPO_ROOT = tmp_path  # point to temp dir so _sites_yaml_path() returns None
     d = tmp_path / "configs"; d.mkdir()
     (d / "feeds.yaml").write_text(
         "sites:\n  - {name: a, type: rss, url: 'http://a/'}\n"
@@ -40,6 +42,7 @@ def test_delete_from_sites_list_file(tmp_path):
 
 def test_delete_sites_file_removed_when_emptied(tmp_path):
     wa = _load_webapp()
+    wa.REPO_ROOT = tmp_path  # point to temp dir so _sites_yaml_path() returns None
     d = tmp_path / "configs"; d.mkdir()
     (d / "one.yaml").write_text(
         "sites:\n  - {name: only, type: rss, url: 'http://a/'}\n", encoding="utf-8")
@@ -49,6 +52,7 @@ def test_delete_sites_file_removed_when_emptied(tmp_path):
 
 def test_delete_single_file_mode(tmp_path):
     wa = _load_webapp()
+    wa.REPO_ROOT = tmp_path  # point to temp dir so _sites_yaml_path() returns None
     f = tmp_path / "config.yaml"
     f.write_text(
         "sites:\n  - {name: a, type: rss, url: 'http://a/'}\n"

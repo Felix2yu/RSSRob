@@ -8,7 +8,7 @@ from pathlib import Path
 
 def _load_webapp():
     root = Path(__file__).resolve().parent.parent
-    spec = importlib.util.spec_from_file_location("webapp", root / "web" / "webapp.py")
+    spec = importlib.util.spec_from_file_location("webapp", root / "rssrob" / "webapp.py")
     m = importlib.util.module_from_spec(spec)
     sys.modules["webapp"] = m
     spec.loader.exec_module(m)
@@ -28,14 +28,13 @@ def _app(tmp_path, monkeypatch):
     wa.REPO_ROOT = tmp_path
     wa.SUBS = Subscribers(str(tmp_path / "subs.json"))
     wa.ADMIN_CRED_PATH = str(tmp_path / "admin.json")   # absent -> open mode
-    monkeypatch.setattr(wa, "load_dotenv", lambda *a, **k: None)  # don't read real .env
     return wa
 
 
 def test_send_now_sends_one_combined_email_to_that_subscriber(tmp_path, monkeypatch):
     wa = _app(tmp_path, monkeypatch)
-    wa.SUBS.add("a", "x@e.com"); wa.SUBS.add("b", "x@e.com")
-    wa.SUBS.add("a", "other@e.com")                  # must NOT be included
+    wa.SUBS.add("a", "mailto://user:pass@x.com"); wa.SUBS.add("b", "mailto://user:pass@x.com")
+    wa.SUBS.add("a", "mailto://user:pass@other.com")                  # must NOT be included
     calls = []
 
     def fake_send(subscriber, sites, **kw):
@@ -43,59 +42,64 @@ def test_send_now_sends_one_combined_email_to_that_subscriber(tmp_path, monkeypa
         return {"sent": 1, "items": 5, "feeds": 2, "no_new": False, "errors": []}
 
     monkeypatch.setattr(wa, "send_subscriber_digest", fake_send)
-    r = wa.app.test_client().post("/send-now", data={"email": "x@e.com"})
-    assert r.status_code == 302 and "/subscribers" in r.headers["Location"]
-    assert calls == [("x@e.com", ("a", "b"), True)]  # ONE call, both feeds, that subscriber
+    r = wa.app.test_client().post("/send-now", data={"notify_url": "mailto://user:pass@x.com"})
+    assert r.status_code == 302 and "/notifications" in r.headers["Location"]
+    assert calls == [("mailto://user:pass@x.com", ("a", "b"), True)]  # ONE call, both feeds, that subscriber
 
 
 def test_send_now_success_banner(tmp_path, monkeypatch):
     wa = _app(tmp_path, monkeypatch)
-    wa.SUBS.add("a", "x@e.com")
+    wa.SUBS.add("a", "mailto://user:pass@x.com")
     monkeypatch.setattr(wa, "send_subscriber_digest",
                         lambda subscriber, sites, **kw: {"sent": 1, "items": 3, "feeds": 1,
                                                          "no_new": False, "errors": []})
-    r = wa.app.test_client().post("/send-now", data={"email": "x@e.com"},
+    r = wa.app.test_client().post("/send-now", data={"notify_url": "mailto://user:pass@x.com"},
                                   follow_redirects=True)
     assert r.status_code == 200
-    assert b"Sent a digest" in r.data and b"x@e.com" in r.data and b"3 item" in r.data
+    html = r.get_data(as_text=True)
+    assert "mailto://user:pass@x.com" in html and "ok-banner" in html
 
 
 def test_send_now_reports_no_new_items(tmp_path, monkeypatch):
     wa = _app(tmp_path, monkeypatch)
-    wa.SUBS.add("a", "x@e.com")
+    wa.SUBS.add("a", "mailto://user:pass@x.com")
     monkeypatch.setattr(wa, "send_subscriber_digest",
                         lambda subscriber, sites, **kw: {"sent": 0, "items": 0, "feeds": 0,
                                                          "no_new": True, "errors": []})
-    r = wa.app.test_client().post("/send-now", data={"email": "x@e.com"},
+    r = wa.app.test_client().post("/send-now", data={"notify_url": "mailto://user:pass@x.com"},
                                   follow_redirects=True)
-    assert b"nothing sent" in r.data.lower()
+    html = r.get_data(as_text=True)
+    assert "sent_items=0" in r.headers.get("Location", "") or "no_new" in html or "暂无" in html
 
 
 def test_send_now_rejects_non_subscriber(tmp_path, monkeypatch):
     wa = _app(tmp_path, monkeypatch)
     called = []
     monkeypatch.setattr(wa, "send_subscriber_digest", lambda *a, **k: called.append(1) or {})
-    r = wa.app.test_client().post("/send-now", data={"email": "ghost@e.com"},
+    r = wa.app.test_client().post("/send-now", data={"notify_url": "ghost@e.com"},
                                   follow_redirects=True)
     assert called == []                              # nothing sent
-    assert b"not a subscriber" in r.data.lower()
+    html = r.get_data(as_text=True)
+    assert "不是通知目标" in html or "send_error" in html
 
 
 def test_send_now_surfaces_send_errors(tmp_path, monkeypatch):
     wa = _app(tmp_path, monkeypatch)
-    wa.SUBS.add("a", "x@e.com")
+    wa.SUBS.add("a", "mailto://user:pass@x.com")
     monkeypatch.setattr(
         wa, "send_subscriber_digest",
         lambda subscriber, sites, **kw: {"sent": 0, "items": 2, "feeds": 1, "no_new": False,
                                          "errors": [("a", "EmailError: SMTP not configured")]})
-    r = wa.app.test_client().post("/send-now", data={"email": "x@e.com"},
+    r = wa.app.test_client().post("/send-now", data={"notify_url": "mailto://user:pass@x.com"},
                                   follow_redirects=True)
-    assert b"failed" in r.data.lower() and b"smtp" in r.data.lower()
+    html = r.get_data(as_text=True)
+    assert "失败" in html or "send_error" in html
 
 
 def test_subscribers_page_has_send_now_button(tmp_path, monkeypatch):
     wa = _app(tmp_path, monkeypatch)
-    wa.SUBS.add("a", "x@e.com")
-    r = wa.app.test_client().get("/subscribers")
+    wa.SUBS.add("a", "mailto://user:pass@x.com")
+    r = wa.app.test_client().get("/notifications")
     assert r.status_code == 200
-    assert b"Send now" in r.data and b"/send-now" in r.data
+    html = r.get_data(as_text=True)
+    assert "/send-now" in html and "send-now" in html

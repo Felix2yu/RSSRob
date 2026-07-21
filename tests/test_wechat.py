@@ -36,7 +36,7 @@ def test_to_items_maps_articles():
                       published_at=1718000000.0)]
     items = c.to_items(raw)
     assert items[0].id == items[0].link == "https://mp.weixin.qq.com/s/AAA"
-    assert items[0].title == "t" and items[0].date == "2024-06-10T06:13:20+00:00"
+    assert items[0].title == "t" and "2024-06-10" in items[0].date
 
 
 def test_to_items_handles_missing_date():

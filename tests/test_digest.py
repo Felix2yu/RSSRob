@@ -13,10 +13,10 @@ def _site():
 
 
 def _record_sends(monkeypatch):
-    """Patch send_email to record (to, bcc) and not actually send."""
+    """Patch send_notification to record (to, bcc) and not actually send."""
     calls = []
-    monkeypatch.setattr(digest, "send_email",
-                        lambda to, subject, body, html=None, bcc=None: calls.append((to, bcc)))
+    monkeypatch.setattr(digest, "send_notification",
+                        lambda urls, title, body, body_html=None: calls.append(urls))
     return calls
 
 
@@ -29,7 +29,7 @@ def test_build_digest_date_title_description():
         {"title": "World", "link": "http://x/2", "date": "06-14", "description": None},
     ]
     subject, text, html = digest.build_digest("My Feed", entries)
-    assert "My Feed" in subject and "2 updates" in subject
+    assert "My Feed" in subject and "2 条更新" in subject
     assert "Hello" in text and "a short summary" in text and "http://x/1" in text
     assert '<a href="http://x/2"' in html and "06-14" in html
 
@@ -43,7 +43,7 @@ def test_build_combined_digest_multi_feed():
             {"title": "B2", "link": "http://b/2", "date": "06-16", "description": "db"}]},
     ]
     subject, text, html = digest.build_combined_digest(sections)
-    assert subject == "[RSSRob] 3 updates across 2 feeds"
+    assert subject == "[RSSRob] 2 个订阅源共 3 条更新"
     assert "Feed A" in text and "Feed B" in text and "A1" in text and "B2" in text
     assert "Feed A" in html and "Feed B" in html and '<a href="http://a/1"' in html
 
@@ -52,7 +52,7 @@ def test_build_combined_digest_single_feed_uses_single_style():
     sections = [{"title": "Only", "entries": [
         {"title": "X", "link": "http://x", "date": "", "description": None}]}]
     subject, _text, _html = digest.build_combined_digest(sections)
-    assert subject == "[RSSRob] Only — 1 update"     # delegates to single-feed style
+    assert subject == "[RSSRob] Only — 1 条更新"     # delegates to single-feed style
 
 
 def test_shorten_truncates_and_strips_leading_css():
@@ -106,7 +106,7 @@ def test_sends_one_email_with_bcc(fixtures, make_fetcher, monkeypatch):
     res = digest.send_feed_digest(_site(), ["a@b.com", "c@d.com"], fetcher=fetcher)
     assert res["sent"] == 2 and res["items"] == 2
     assert len(calls) == 1                          # ONE email
-    assert calls[0][1] == ["a@b.com", "c@d.com"]    # via Bcc
+    assert calls[0] == ["a@b.com", "c@d.com"]       # via Bcc
 
 
 def test_first_send_uses_first_limit_then_incremental(fixtures, make_fetcher, monkeypatch, tmp_path):
@@ -159,7 +159,7 @@ def test_all_ignores_state(fixtures, make_fetcher, monkeypatch, tmp_path):
 def _orchestration(monkeypatch, per_feed):
     """Fake obtain_items/enrich_items so these tests exercise orchestration, not
     feed parsing. `per_feed` is {feed_name: [Item, ...]} and is read live, so
-    callers may mutate it between sends. Returns the recorded send_email calls."""
+    callers may mutate it between sends. Returns the recorded send_notification calls."""
     def fake_obtain(site, fetcher):
         return list(per_feed.get(site.name, [])), site.title or site.name, None
 
@@ -170,9 +170,9 @@ def _orchestration(monkeypatch, per_feed):
     monkeypatch.setattr(digest, "obtain_items", fake_obtain)
     monkeypatch.setattr(digest, "enrich_items", fake_enrich)
     calls = []
-    monkeypatch.setattr(digest, "send_email",
-                        lambda to, subject, body, html=None, bcc=None:
-                        calls.append({"to": to, "subject": subject, "body": body}))
+    monkeypatch.setattr(digest, "send_notification",
+                        lambda urls, title, body, body_html=None:
+                        calls.append({"urls": urls, "title": title, "body": body}))
     return calls
 
 
@@ -189,10 +189,10 @@ def test_subscriber_digest_combines_feeds_into_one_email(monkeypatch, tmp_path):
     state = digest.SentStore(str(tmp_path / "s.json"))
     res = digest.send_subscriber_digest("alice@x", [a, b], state=state, fetcher=object())
     assert len(calls) == 1                           # ONE combined email
-    assert calls[0]["to"] == ["alice@x"]             # To: subscriber, not Bcc
+    assert calls[0]["urls"] == ["alice@x"]             # To: subscriber, not Bcc
     assert res["feeds"] == 2 and res["items"] == 3 and res["sent"] == 1
     assert "Feed A" in calls[0]["body"] and "Feed B" in calls[0]["body"]
-    assert "across 2 feeds" in calls[0]["subject"]
+    assert "2 个订阅源共 3 条更新" in calls[0]["title"]
 
 
 def test_subscriber_digest_marks_only_that_subscriber(monkeypatch, tmp_path):
@@ -227,8 +227,8 @@ def test_subscriber_digest_partial_feed_error_still_sends_rest(monkeypatch, tmp_
                         lambda site, items, fetcher: [{"title": it.title, "link": it.link,
                             "date": "", "description": it.summary} for it in items])
     calls = []
-    monkeypatch.setattr(digest, "send_email",
-                        lambda to, s, b, html=None, bcc=None: calls.append(to))
+    monkeypatch.setattr(digest, "send_notification",
+                        lambda urls, title, body, body_html=None: calls.append(urls))
     state = digest.SentStore(str(tmp_path / "s.json"))
     res = digest.send_subscriber_digest("alice@x", [good, bad], state=state, fetcher=object())
     assert len(calls) == 1 and res["feeds"] == 1 and res["sent"] == 1
@@ -275,23 +275,23 @@ def test_cli_all_subscribers_sends_each_one_combined(monkeypatch, tmp_path):
     cfg = _write_two_feed_config(tmp_path)
     subs_path = str(tmp_path / "subs.json")
     s = Subscribers(subs_path)
-    s.add("a", "x@e.com"); s.add("b", "x@e.com"); s.add("a", "y@e.com")
+    s.add("a", "mailto://user:pass@x.com"); s.add("b", "mailto://user:pass@x.com")
+    s.add("a", "mailto://user:pass@y.com")
     seen = []
     monkeypatch.setattr(digest, "send_subscriber_digest",
                         lambda subscriber, sites, **kw: seen.append(
                             (subscriber, tuple(si.name for si in sites)))
                         or {"sent": 1, "items": 2, "feeds": len(sites),
                             "no_new": False, "errors": [], "subject": "x"})
-    monkeypatch.setattr(digest, "load_dotenv", lambda *a, **k: None)
     rc = digest.main(["--all-subscribers", "--config", cfg, "--subscribers", subs_path])
     assert rc == 0
-    assert ("x@e.com", ("a", "b")) in seen and ("y@e.com", ("a",)) in seen
+    assert ("mailto://user:pass@x.com", ("a", "b")) in seen
+    assert ("mailto://user:pass@y.com", ("a",)) in seen
 
 
 def test_cli_subscriber_mode_unknown_email_returns_1(monkeypatch, tmp_path):
     cfg = _write_two_feed_config(tmp_path)
     subs_path = str(tmp_path / "subs.json")
-    monkeypatch.setattr(digest, "load_dotenv", lambda *a, **k: None)
     rc = digest.main(["--subscriber", "ghost@e.com", "--config", cfg,
                       "--subscribers", subs_path])
     assert rc == 1
@@ -308,7 +308,6 @@ def test_cli_site_mode_returns_1_on_send_error(monkeypatch, tmp_path):
     cfg = _write_two_feed_config(tmp_path)
     subs_path = str(tmp_path / "subs.json")
     Subscribers(subs_path).add("a", "x@e.com")
-    monkeypatch.setattr(digest, "load_dotenv", lambda *a, **k: None)
     monkeypatch.setattr(digest, "send_feed_digest",
                         lambda *a, **k: {"subject": "S", "items": 2, "sent": 0,
                                         "no_new": False,
@@ -322,7 +321,6 @@ def test_cli_all_subscribers_returns_1_on_send_failure(monkeypatch, tmp_path):
     cfg = _write_two_feed_config(tmp_path)
     subs_path = str(tmp_path / "subs.json")
     Subscribers(subs_path).add("a", "x@e.com")
-    monkeypatch.setattr(digest, "load_dotenv", lambda *a, **k: None)
     monkeypatch.setattr(digest, "send_subscriber_digest",
                         lambda subscriber, sites, **kw: {"subject": "S", "items": 2,
                             "feeds": 1, "sent": 0, "no_new": False,

@@ -1,4 +1,4 @@
-import web.webapp as webapp
+import rssrob.webapp as webapp
 
 
 def test_about_page_renders():
@@ -6,5 +6,5 @@ def test_about_page_renders():
     assert r.status_code == 200
     html = r.get_data(as_text=True)
     assert "Chenguang Wan" in html
-    assert "testing" in html.lower()
-    assert "research notification" in html.lower()
+    assert "testing" in html.lower() or "测试中" in html
+    assert "研究通知" in html or "research notification" in html.lower()

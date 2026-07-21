@@ -31,6 +31,27 @@ def main(argv=None) -> int:
                              "else config.yaml, else config.example.yaml)")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("serve")
+    p_web = sub.add_parser("web", help="start the Flask management web UI")
+    p_web.add_argument("--host", default="127.0.0.1",
+                        help="bind host (default 127.0.0.1)")
+    p_web.add_argument("--port", type=int, default=5000,
+                        help="bind port (default 5000)")
+    p_web.add_argument("--proxy", metavar="URL",
+                        help="default proxy for feeds without their own "
+                             "(e.g. http://127.0.0.1:7890)")
+    p_web.add_argument("--proxy-port", type=int, metavar="PORT",
+                        help="proxy port used with --proxy-host (default 7890)")
+    p_web.add_argument("--proxy-host", default="127.0.0.1",
+                        help="proxy host used with --proxy-port (default 127.0.0.1)")
+    p_web.add_argument("--proxy-scheme", default="http",
+                        choices=["http", "https", "socks5", "socks5h"],
+                        help="proxy scheme (default http)")
+    p_web.add_argument("--https", action="store_true",
+                        help="serve over HTTPS with an adhoc self-signed cert")
+    p_web.add_argument("--tls-cert", metavar="PATH",
+                        help="PEM cert file for browser-trusted HTTPS")
+    p_web.add_argument("--tls-key", metavar="PATH",
+                        help="PEM private key matching --tls-cert")
     p_once = sub.add_parser("run-once")
     p_once.add_argument("site")
     p_once.add_argument("--write", action="store_true")
@@ -76,6 +97,8 @@ def main(argv=None) -> int:
         return _twitter_add(args)
     if args.command == "set-admin-password":
         return _set_admin_password(args)
+    if args.command == "web":
+        return _web(args)
 
     try:
         config = load_config(args.config)
@@ -106,6 +129,35 @@ def _serve(config) -> int:
         scheduler.stop()
         server.server_close()
         store.close()
+    return 0
+
+
+def _web(args) -> int:
+    """Start the Flask management web UI."""
+    from .webapp import app
+    from .webapp import resolve_proxy, resolve_ssl_context, PROXY_URL
+    from .config import normalize_proxy
+
+    # Apply proxy settings
+    proxy_url = normalize_proxy(resolve_proxy(args.proxy, args.proxy_port,
+                                              args.proxy_host, args.proxy_scheme))
+    if proxy_url:
+        print(f"default proxy for feeds without their own: {proxy_url}")
+
+    # Resolve SSL context
+    try:
+        ssl_context = resolve_ssl_context(args.https, args.tls_cert, args.tls_key)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    if ssl_context == "adhoc":
+        print("serving over HTTPS (adhoc self-signed cert; browsers warn once)")
+    elif ssl_context:
+        print(f"serving over HTTPS with cert {args.tls_cert}")
+
+    print(f"starting web UI on http://{args.host}:{args.port}/")
+    app.run(host=args.host, port=args.port, ssl_context=ssl_context,
+            debug=False, use_debugger=False, threaded=True)
     return 0
 
 

@@ -1,4 +1,4 @@
-import web.webapp as webapp
+import rssrob.webapp as webapp
 from rssrob.twitter import TwitterAuthError
 
 

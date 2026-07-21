@@ -9,7 +9,7 @@ import pytest
 
 def _load_webapp():
     root = Path(__file__).resolve().parent.parent
-    spec = importlib.util.spec_from_file_location("webapp", root / "web" / "webapp.py")
+    spec = importlib.util.spec_from_file_location("webapp", root / "rssrob" / "webapp.py")
     m = importlib.util.module_from_spec(spec)
     sys.modules["webapp"] = m
     spec.loader.exec_module(m)

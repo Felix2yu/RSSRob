@@ -8,7 +8,7 @@ from rssrob import admin_credential
 
 def _load_webapp():
     root = Path(__file__).resolve().parent.parent
-    spec = importlib.util.spec_from_file_location("webapp", root / "web" / "webapp.py")
+    spec = importlib.util.spec_from_file_location("webapp", root / "rssrob" / "webapp.py")
     m = importlib.util.module_from_spec(spec)
     sys.modules["webapp"] = m
     spec.loader.exec_module(m)
@@ -42,8 +42,9 @@ def test_open_mode_serves_and_banner_links_setup_from_loopback(tmp_path):
     wa = _wa(tmp_path)
     r = wa.app.test_client().get("/about")            # default REMOTE_ADDR=127.0.0.1
     assert r.status_code == 200
-    assert b"No admin password set" in r.data
-    assert b"/setup" in r.data
+    html = r.get_data(as_text=True)
+    assert "未设置管理员密码" in html or "No admin password set" in html
+    assert "/setup" in html
 
 
 def test_open_mode_banner_says_local_only_from_remote(tmp_path):
@@ -51,8 +52,9 @@ def test_open_mode_banner_says_local_only_from_remote(tmp_path):
     r = wa.app.test_client().get("/about",
                                  environ_base={"REMOTE_ADDR": "10.0.0.5"})
     assert r.status_code == 200
-    assert b"rssrob set-admin-password" in r.data
-    assert b"/setup" not in r.data
+    html = r.get_data(as_text=True)
+    assert "rssrob set-admin-password" in html
+    assert "/setup" not in html
 
 
 # --- gate + login + logout ---------------------------------------------------

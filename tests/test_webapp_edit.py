@@ -11,7 +11,7 @@ import yaml
 
 def _load_webapp():
     root = Path(__file__).resolve().parent.parent
-    spec = importlib.util.spec_from_file_location("webapp", root / "web" / "webapp.py")
+    spec = importlib.util.spec_from_file_location("webapp", root / "rssrob" / "webapp.py")
     m = importlib.util.module_from_spec(spec)
     sys.modules["webapp"] = m
     spec.loader.exec_module(m)
@@ -168,7 +168,7 @@ def test_preview_has_edit_button_not_delete(tmp_path):
     # the index route renders without per-item article fetches (lazy enrichment),
     # so no stubbing is needed here
     html = client.get("/", query_string={"site": "ipp"}).get_data(as_text=True)
-    assert "edit feed" in html               # edit entry point present
+    assert "编辑" in html or "edit" in html.lower()  # edit entry point present
     assert "delete-feed-btn" not in html     # delete moved into the edit page
 
 
