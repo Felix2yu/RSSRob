@@ -5,11 +5,10 @@ WORKDIR /app
 ENV TZ=Asia/Shanghai
 RUN ln -sf /usr/share/zoneinfo/$TZ /etc/localtime
 
-COPY requirements.txt requirements-web.txt ./
-RUN pip install --no-cache-dir -r requirements.txt -r requirements-web.txt
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com -r requirements.txt
 
 COPY rssrob/ rssrob/
-COPY web/ web/
 COPY config.example.yaml ./
 
 RUN groupadd -g 1000 rssrob \
@@ -18,9 +17,10 @@ RUN groupadd -g 1000 rssrob \
     && chown -R rssrob:rssrob /app
 
 COPY docker-entrypoint.sh ./
+RUN chmod +x docker-entrypoint.sh
 
 USER rssrob
 
 EXPOSE 5000
 
-ENTRYPOINT ["./docker-entrypoint.sh"]
+ENTRYPOINT ["/bin/sh", "./docker-entrypoint.sh"]
