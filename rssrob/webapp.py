@@ -1,0 +1,1603 @@
+"""RSSRob preview web app.
+
+A small Flask app that renders the items RSSRob would extract from a configured
+site, using the real extraction machinery (``rssrob.config`` +
+``rssrob.pipeline.obtain_items``). It fetches the page live and falls back to a
+saved local copy when the network fails.
+
+Run (from the repo root):
+    rssrob web
+then open http://127.0.0.1:5000/  (switch sites with ?site=<name>)
+Add --https to serve over HTTPS with an adhoc self-signed cert, then open
+https://127.0.0.1:5000/ (browsers warn once about the untrusted cert).
+For a stable, browser-trusted cert (no per-run warning), pass --tls-cert
+and --tls-key pointing at a PEM cert/key pair, e.g. one made by mkcert.
+
+To reach content behind a firewall, route outbound fetches through a proxy:
+    rssrob web --proxy-port 7890     # http://127.0.0.1:7890
+    rssrob web --proxy socks5://127.0.0.1:1080
+or set RSSROB_PROXY in the environment.
+"""
+
+import argparse
+import io
+import os
+import re
+import sys
+import time
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+
+# Anchor config/sample paths to the repo root (CWD-independent).
+# This file now lives in rssrob/ (inside the package), so REPO_ROOT is one level up.
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+import lxml.etree
+import lxml.html
+import requests
+import yaml
+from flask import (Flask, abort, jsonify, redirect, render_template, request,
+                   send_file, session, url_for)
+
+from rssrob.article import fetch_article
+from rssrob.backup import build_backup, restore_backup
+from rssrob.config import ConfigError, load_config, normalize_proxy
+from rssrob.digest import SentStore, send_subscriber_digest
+from rssrob.filters import apply_filter, parse_terms
+from rssrob.extract import extract_items
+from rssrob import admin_credential
+from rssrob.notify import send_notification
+from rssrob.fetch import Fetcher
+from rssrob.pipeline import obtain_items, run_cycle
+from rssrob.rss import parse_feed
+from rssrob.scheduler import Scheduler, build_twitter_client, build_wechat_client
+from rssrob.store import Store
+from rssrob.subscribers import Subscribers
+from rssrob.notification_targets import NotificationTargets
+from rssrob.twitter import X_LOGIN_URL, TwitterAuthError
+from rssrob.twitter_credential import DEFAULT_PATH as TWITTER_CRED_PATH
+from rssrob.twitter_credential import credential_from_cookie
+from rssrob.twitter_credential import load as load_twitter_credential
+from rssrob.twitter_credential import save as save_twitter_credential
+from rssrob.wechat import MP_LOGIN_URL, WeChatAuthError
+from rssrob.wechat_credential import DEFAULT_PATH as WECHAT_CRED_PATH
+from rssrob.wechat_credential import credential_from_login
+from rssrob.wechat_credential import load as load_credential
+from rssrob.wechat_credential import save as save_credential
+
+# Reads config.yaml when present, otherwise the bundled example; saves always go
+# to config.yaml. Set RSSROB_CONFIG to override both read and write.
+CONFIG_OVERRIDE = os.environ.get("RSSROB_CONFIG")
+
+
+def _config_path():
+    if CONFIG_OVERRIDE:
+        return CONFIG_OVERRIDE
+    cdir = REPO_ROOT / "configs"
+    if cdir.is_dir():
+        return str(cdir)
+    cy = REPO_ROOT / "config.yaml"
+    return str(cy if cy.exists() else REPO_ROOT / "config.example.yaml")
+
+
+def _save_path():
+    if CONFIG_OVERRIDE:
+        return CONFIG_OVERRIDE
+    cdir = REPO_ROOT / "configs"
+    if cdir.is_dir():
+        return str(cdir)
+    return str(REPO_ROOT / "config.yaml")
+
+
+def _sites_yaml_path():
+    """Return configs/sites.yaml path if it exists, else None."""
+    p = REPO_ROOT / "configs" / "sites.yaml"
+    return str(p) if p.is_file() else None
+
+
+# Live fetch falls back to these saved copies (keyed by url) on a network error,
+# so the preview keeps working offline. (Saved pages live in samples/.)
+FALLBACK_FILES = {
+    "http://www.ipp.cas.cn/": str(REPO_ROOT / "samples" / "ipp_page.html"),
+    "http://www.ipp.cas.cn/tzgg/tz_zhb/202606/t20260615_841876.html":
+        str(REPO_ROOT / "samples" / "site.html"),
+}
+
+DESC_LEN = 160                 # short-description length
+_ITEM_CACHE: dict = {}         # url -> (full_title, description) cached across requests
+
+# Global fallback proxy, applied to any fetch whose feed has no per-feed proxy.
+# Per-feed proxies live in each site's `proxy:` config. Set RSSROB_PROXY or pass
+# --proxy / --proxy-port on the CLI (see __main__) for the global default.
+PROXY_URL = os.environ.get("RSSROB_PROXY") or None
+
+# Per-feed notification target list (gitignored).
+NOTIF_TARGETS = NotificationTargets(str(REPO_ROOT / "var" / "notification_targets.json"))
+SUBS = Subscribers(str(REPO_ROOT / "var" / "subscribers.json"))
+
+
+# Defaults for the selector playground (the IPP 通知公告 example).
+PLAYGROUND_DEFAULTS = {
+    "url": "http://www.ipp.cas.cn/",
+    "item": ("xpath://h2[normalize-space()='通知公告']/ancestor::div"
+             "[contains(@class,'ipp2020-item')][1]//div[@class='bd']//ul/li"),
+    "title_sel": "xpath:.//a",
+    "link_sel": "xpath:.//a/@href",
+    "date_sel": "xpath:.//span",
+    "proxy": "",
+    "article_sel": "",     # html: article-body selector -> article.content (descriptions)
+    "account_id": "",      # wechat: 公众号 fakeid
+    "account_name": "",    # wechat/twitter: human label
+    "username": "",        # twitter: @handle (no leading @)
+}
+
+app = Flask(__name__, template_folder=str(Path(__file__).parent / "templates"))
+
+# Admin login credential (gitignored, under var/). When present it gates the
+# whole UI; absent means "open mode" (today's behavior) with a setup banner.
+ADMIN_CRED_PATH = admin_credential.DEFAULT_PATH
+
+# Endpoints reachable without a session (the login/logout/first-run flow + static).
+_PUBLIC_ENDPOINTS = {"login", "logout", "setup", "static", "serve_feed"}
+
+
+def _load_admin():
+    """The current admin credential (read fresh each call), or None in open mode."""
+    return admin_credential.load(ADMIN_CRED_PATH)
+
+
+def _is_loopback():
+    """True when the request comes from localhost (no X-Forwarded-For parsing)."""
+    return request.remote_addr in ("127.0.0.1", "::1")
+
+
+def _safe_next(target):
+    """Only allow same-site relative redirect targets."""
+    if target and target.startswith("/") and not target.startswith("//"):
+        return target
+    return None
+
+
+# Sign session cookies with the persisted key when a credential exists at boot;
+# otherwise an ephemeral key (no sessions are issued in open mode anyway).
+_boot_cred = _load_admin()
+app.secret_key = _boot_cred.secret_key if _boot_cred else os.urandom(32)
+
+
+def _start_scheduler():
+    """Start the background feed scraper so XML files get generated."""
+    import threading
+    def _run():
+        try:
+            _cfg = load_config(_config_path())
+            Scheduler(_cfg, Store(_cfg.state_db), Fetcher()).start()
+        except Exception as exc:
+            print(f"background scraper disabled: {exc}", file=sys.stderr)
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+
+_start_scheduler()
+
+
+@app.before_request
+def _require_login():
+    cred = _load_admin()
+    if cred is None:                                  # open mode: no auth
+        return None
+    if request.endpoint in _PUBLIC_ENDPOINTS:
+        return None
+    if session.get("user"):
+        return None
+    return redirect(url_for("login", next=request.path))
+
+
+@app.context_processor
+def _inject_admin():
+    cred = _load_admin()
+    return {
+        "admin_required": cred is not None,
+        "admin_user": session.get("user"),
+        "admin_can_setup": cred is None and _is_loopback(),
+    }
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    cred = _load_admin()
+    if cred is None:                                  # nothing to log into
+        return redirect(url_for("index"))
+    nxt = _safe_next(request.values.get("next"))
+    if session.get("user"):
+        return redirect(nxt or url_for("index"))
+    error = None
+    if request.method == "POST":
+        username = (request.form.get("username") or "").strip()
+        password = request.form.get("password") or ""
+        if admin_credential.verify(cred, username, password):
+            app.secret_key = cred.secret_key          # match the persisted key (survives restart)
+            session["user"] = cred.username
+            session.permanent = True
+            return redirect(nxt or url_for("index"))
+        error = "incorrect username or password"      # same for bad user or pass
+    return render_template("login.html", error=error, next=nxt or "")
+
+
+@app.route("/logout", methods=["POST"])
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
+
+
+@app.route("/setup", methods=["GET", "POST"])
+def setup():
+    if _load_admin() is not None:                     # first-run only
+        return redirect(url_for("login"))
+    # Only allow setup from localhost for security
+    if not _is_loopback():
+        abort(403)
+    error = None
+    if request.method == "POST":
+        username = (request.form.get("username") or "").strip() or "admin"
+        password = request.form.get("password") or ""
+        confirm = request.form.get("confirm") or ""
+        if not password:
+            error = "password must not be empty"
+        elif password != confirm:
+            error = "passwords do not match"
+        else:
+            cred = admin_credential.create(username, password, time.time())
+            admin_credential.save(ADMIN_CRED_PATH, cred)
+            app.secret_key = cred.secret_key          # sign sessions with the persisted key (survives restart)
+            session["user"] = cred.username
+            session.permanent = True
+            return redirect(url_for("index"))
+    return render_template("setup.html", error=error)
+
+
+@app.route("/account", methods=["GET", "POST"])
+def account():
+    cred = _load_admin()                              # the gate guarantees not None
+    error = None
+    saved = False
+    if request.method == "POST":
+        current = request.form.get("current") or ""
+        new_username = (request.form.get("username") or "").strip() or cred.username
+        new_password = request.form.get("password") or ""
+        confirm = request.form.get("confirm") or ""
+        if not admin_credential.verify(cred, cred.username, current):
+            error = "current password is incorrect"
+        elif not new_password:
+            error = "new password must not be empty"
+        elif new_password != confirm:
+            error = "new passwords do not match"
+        else:
+            cred = admin_credential.create(new_username, new_password,
+                                           time.time(), secret_key=cred.secret_key)
+            admin_credential.save(ADMIN_CRED_PATH, cred)
+            session["user"] = cred.username           # stay logged in if name changed
+            saved = True
+    return render_template("account.html", active=None, sites=_safe_sites(),
+                           username=cred.username, error=error, saved=saved)
+
+
+def _strip_html(s):
+    if s and "<" in s:
+        try:
+            frag = lxml.html.fromstring(s)
+            lxml.etree.strip_elements(frag, "script", "style", with_tail=False)
+            return frag.text_content()
+        except Exception:
+            return s
+    return s
+
+
+# Leading CSS rule blocks (e.g. Word/WPS exports dump "@page{...} p{...}" as text).
+_LEADING_CSS = re.compile(r"^(?:\s*[^{}<>]*\{[^{}]*\}\s*)+")
+
+
+def _clean_desc(text):
+    if not text:
+        return text
+    return _LEADING_CSS.sub("", text).strip()
+
+
+def _shorten(text, n=DESC_LEN):
+    if not text:
+        return None
+    text = re.sub(r"\s+", " ", _clean_desc(text)).strip()
+    if not text:
+        return None
+    return text if len(text) <= n else text[:n].rstrip() + "…"
+
+
+def _article_kwargs(article_sel):
+    """Map a feed's `article` config block to fetch_article keyword selectors."""
+    if not article_sel:
+        return {}
+    keys = {"title": "title_selector", "content": "content_selector",
+            "date": "date_selector"}
+    return {keys[k]: v for k, v in article_sel.items() if k in keys and v}
+
+
+def _enrich_one(link, fetcher, article_sel):
+    """(title, description) for one article link, cached in _ITEM_CACHE.
+
+    Returns (None, None) if the article can't be fetched — the caller falls
+    back to the item's own title. Shared by enrich() and the /enrich endpoint
+    so both use one cache and one fetch path."""
+    if link not in _ITEM_CACHE:
+        try:
+            art = fetch_article(link, fetcher, **_article_kwargs(article_sel))
+            _ITEM_CACHE[link] = (art.title, _shorten(_strip_html(art.content_text)))
+        except Exception:
+            _ITEM_CACHE[link] = (None, None)
+    return _ITEM_CACHE[link]
+
+
+def enrich(item, fetcher, article_sel=None):
+    """Return (display_title, description) for an item.
+
+    For rss items the list title and summary are already full. For html items
+    the list title is often truncated by the source page, so we follow the link
+    and use the article's full title plus a body snippet, using the feed's own
+    `article` selectors (IPP defaults otherwise). Results cached."""
+    if item.summary:                       # rss: title + summary already complete
+        return item.title, _shorten(_strip_html(item.summary))
+    if not item.link:
+        return item.title, None
+    full_title, desc = _enrich_one(item.link, fetcher, article_sel)
+    return (full_title or item.title), desc
+
+
+class FallbackFetcher:
+    """Fetch live; fall back to a saved local file on failure.
+
+    Shares the ``get`` shape of ``rssrob.fetch.Fetcher`` so it drops straight
+    into ``rssrob.pipeline.obtain_items``. Records which source was used so the
+    page can show a live/offline badge.
+    """
+
+    def __init__(self, fallback_files, proxy=None):
+        self.fallback_files = fallback_files
+        self.proxy = proxy or PROXY_URL   # per-feed proxy, else the global default
+        self.source = None   # "live" | "saved"
+        self.error = None    # the live error message when we fell back
+
+    def get(self, url, timeout=20, user_agent="RSSRob/0.1"):
+        proxies = {"http": self.proxy, "https": self.proxy} if self.proxy else None
+        try:
+            resp = requests.get(url, timeout=timeout,
+                                headers={"User-Agent": user_agent},
+                                proxies=proxies)
+            resp.raise_for_status()
+            self.source = "live"
+            return resp.content
+        except Exception as e:
+            path = self.fallback_files.get(url)
+            if path and os.path.exists(path):
+                self.source = "saved"
+                self.error = str(e)
+                with open(path, "rb") as f:
+                    return f.read()
+            raise
+
+
+@app.route("/")
+def index():
+    try:
+        config = load_config(_config_path())
+    except (ConfigError, FileNotFoundError) as e:
+        return render_template("error.html", message=f"config error: {e}"), 500
+
+    if not config.sites:
+        return render_template("error.html", message="no sites configured"), 500
+
+    site_name = request.args.get("site", config.sites[0].name)
+    site = next((s for s in config.sites if s.name == site_name), None)
+    if site is None:
+        abort(404, description=f"no such site: {site_name}")
+
+    fetcher = FallbackFetcher(FALLBACK_FILES, proxy=site.proxy)
+    # wechat/twitter feeds are fetched via their API clients, not an HTTP fetch.
+    wechat_client = _wechat_client() if site.type == "wechat" else None
+    twitter_client = _twitter_client() if site.type == "twitter" else None
+    try:
+        items, feed_title, feed_desc = obtain_items(
+            site, fetcher, wechat_client=wechat_client,
+            twitter_client=twitter_client)
+    except WeChatAuthError:
+        return render_template(
+            "error.html",
+            message="not logged in to mp.weixin.qq.com — open the "
+                    "“wechat 订阅号” page and paste your cookie + token first.",
+            sites=config.sites,
+            active=site.name,
+        ), 502
+    except TwitterAuthError:
+        return render_template(
+            "error.html",
+            message="not logged in to X — open the “twitter” page and "
+                    "paste your cookie first.",
+            sites=config.sites,
+            active=site.name,
+        ), 502
+    except Exception as e:
+        if site.type == "twitter":
+            src = f"@{site.username}"
+        else:
+            src = site.url or f"公众号 {site.account_name or site.account_id}"
+        return render_template(
+            "error.html",
+            message=f"could not load {src}: {e}",
+            sites=config.sites,
+            active=site.name,
+        ), 502
+
+    # remember how the page itself was loaded (shown as a live/saved badge)
+    main_source, main_error = fetcher.source, fetcher.error
+
+    # Render at once from the data we already have: the raw title plus the RSS
+    # summary (no network). Html items have no summary — their full title and
+    # description are filled in after load by the /enrich endpoint, so a page
+    # with many slow articles still renders instantly.
+    entries = []
+    for it in items:
+        desc = _shorten(_strip_html(it.summary)) if it.summary else None
+        entries.append({
+            "item": it,
+            "title": it.title,
+            "desc": desc,
+            "needs_enrich": (not desc) and bool(it.link),
+        })
+
+    subs = SUBS.items(site.name)          # {email: hours}
+    return render_template(
+        "preview.html",
+        site=site,
+        sites=config.sites,
+        active=site.name,
+        entries=entries,
+        source=main_source,
+        fetch_error=main_error,
+        display_title=site.title or feed_title or site.name,
+        subscriber_count=len(subs),
+        subscribers=subs,
+        show_subs=bool(request.args.get("show_subs")),
+        subscribed=request.args.get("subscribed"),
+        sub_error=request.args.get("sub_error"),
+        saved_targets=NOTIF_TARGETS.list(),
+    )
+
+
+@app.route("/feeds/<name>.xml")
+def serve_feed(name):
+    try:
+        output_dir = Path(load_config(_config_path()).output_dir)
+    except Exception:
+        output_dir = REPO_ROOT / "var" / "feeds"
+    if not output_dir.is_absolute():
+        output_dir = REPO_ROOT / output_dir
+    xml_file = output_dir / f"{name}.xml"
+    if not xml_file.is_file():
+        abort(404, description=f"feed not found: {name}")
+    return send_file(xml_file, mimetype="application/rss+xml; charset=utf-8")
+
+
+@app.route("/run-now/<name>", methods=["POST"])
+def run_now(name):
+    """Manually trigger a scrape of one feed."""
+    import threading
+    try:
+        config = load_config(_config_path())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    site = next((s for s in config.sites if s.name == name), None)
+    if site is None:
+        return jsonify({"error": f"no such site: {name}"}), 404
+    output_dir = config.output_dir
+    if not Path(output_dir).is_absolute():
+        output_dir = str(REPO_ROOT / output_dir)
+    store = Store(config.state_db)
+    fetcher = FallbackFetcher(FALLBACK_FILES, proxy=site.proxy)
+
+    def _scrape():
+        try:
+            run_cycle(site, store, fetcher, output_dir)
+        except Exception as e:
+            print(f"[run-now] {name} failed: {e}", file=sys.stderr)
+
+    threading.Thread(target=_scrape, daemon=True).start()
+    return jsonify({"status": "started", "site": name})
+
+
+@app.route("/enrich", methods=["POST"])
+def enrich_items():
+    """Lazy-fill full titles + descriptions for a site's html items.
+
+    Body: ``{"site": <name>, "links": [<url>, ...]}``. Returns
+    ``{<url>: {"title", "desc"}}``. Shares the ``_ITEM_CACHE`` with ``enrich()``
+    and runs the article fetches in parallel so a cold batch returns within
+    roughly one timeout window instead of N. Inherits the login gate from the
+    global ``before_request`` (not in _PUBLIC_ENDPOINTS)."""
+    payload = request.get_json(silent=True) or {}
+    site_name = payload.get("site")
+    links = list(dict.fromkeys(
+        l for l in (payload.get("links") or []) if isinstance(l, str)))
+    if not site_name or not links:
+        return jsonify({}), 400
+
+    try:
+        config = load_config(_config_path())
+    except (ConfigError, FileNotFoundError) as e:
+        return jsonify({"error": f"config error: {e}"}), 500
+    site = next((s for s in config.sites if s.name == site_name), None)
+    if site is None:
+        return jsonify({}), 404
+
+    fetcher = FallbackFetcher(FALLBACK_FILES, proxy=site.proxy)
+    results = {}
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        futs = {pool.submit(_enrich_one, link, fetcher, site.article): link
+                for link in links}
+        for fut, link in futs.items():
+            title, desc = fut.result()
+            results[link] = {"title": title, "desc": desc}
+    return jsonify(results)
+
+
+@app.route("/subscribe", methods=["POST"])
+def subscribe():
+    """Add a notification target to a feed's subscriber list."""
+    site = (request.form.get("site") or "").strip()
+    notify_url = (request.form.get("notify_url") or "").strip()
+    notify_name = (request.form.get("notify_name") or "").strip()
+    if not site:
+        abort(400, description="missing feed")
+    hours = request.form.get("hours") or 24
+    status = SUBS.add(site, notify_url, hours)
+    # Auto-save new target to address book if name provided
+    if notify_name and notify_url and status == "added":
+        NOTIF_TARGETS.add(notify_name, notify_url)
+    if status == "added":
+        return redirect(url_for("index", site=site, subscribed=notify_url, show_subs=1))
+    msg = "已存在" if status == "exists" else "请输入有效的通知地址（如 tgram://bot_token/chat_id）"
+    return redirect(url_for("index", site=site, sub_error=msg, show_subs=1))
+
+
+@app.route("/unsubscribe", methods=["POST"])
+def unsubscribe():
+    """Remove a notification target from a feed's subscriber list."""
+    site = (request.form.get("site") or "").strip()
+    notify_url = (request.form.get("notify_url") or "").strip()
+    if not site:
+        abort(400, description="missing feed")
+    SUBS.remove(site, notify_url)
+    return redirect(url_for("index", site=site, show_subs=1))
+
+
+@app.route("/set-frequency", methods=["POST"])
+def set_frequency():
+    """Update a target's digest frequency (hours)."""
+    notify_url = (request.form.get("notify_url") or "").strip()
+    hours = request.form.get("hours") or 24
+    SUBS.set_freq(notify_url, hours)
+    return redirect(url_for("notify_list", updated=notify_url))
+
+
+@app.route("/notifications")
+def notify_list():
+    """List every notification target and which feeds it's subscribed to."""
+    try:
+        sites = load_config(_config_path()).sites
+    except Exception:
+        sites = []
+    return render_template("notifications.html", sites=sites, active=None,
+                           by_target=SUBS.by_target(),
+                           updated=request.args.get("updated"),
+                           added=request.args.get("added"),
+                           add_error=request.args.get("add_error"),
+                           sent=request.args.get("sent"),
+                           sent_items=request.args.get("sent_items"),
+                           sent_feeds=request.args.get("sent_feeds"),
+                           send_error=request.args.get("send_error"),
+                           auth_notify_enabled=SUBS.auth_notify_enabled(),
+                           auth_notify_targets=SUBS.auth_notify_targets(),
+                           all_target_urls=SUBS.all_target_urls())
+
+
+@app.route("/notify-auth-settings", methods=["POST"])
+def save_auth_notify():
+    """Save token-expiry notification settings."""
+    enabled = request.form.get("auth_enabled") == "on"
+    SUBS.set_auth_notify_enabled(enabled)
+    if enabled:
+        targets = request.form.getlist("auth_targets")
+        SUBS.set_auth_notify_targets(targets)
+    return redirect(url_for("notify_list"))
+
+
+@app.route("/send-now", methods=["POST"])
+def send_now():
+    """Send one notification target a combined digest of new items across all
+    their feeds, now."""
+    notify_url = (request.form.get("notify_url") or "").strip()
+    info = SUBS.by_target().get(notify_url)
+    if not info:
+        return redirect(url_for("notify_list",
+                                send_error=f"{notify_url or 'that target'} 不是通知目标"))
+    try:
+        config = load_config(_config_path())
+    except Exception as e:
+        return redirect(url_for("notify_list", send_error=f"配置错误: {e}"))
+
+    sites_by_name = {s.name: s for s in config.sites}
+    sites = [sites_by_name[f] for f in info["feeds"] if f in sites_by_name]
+    limit = int(config.digest.get("limit", 10))
+    first_limit = int(config.digest.get("first_limit", 20))
+    state = SentStore(str(REPO_ROOT / "var" / "digest_state.json"))
+
+    result = send_subscriber_digest(notify_url, sites, limit=limit,
+                                    first_limit=first_limit, state=state, only_new=True)
+
+    if result.get("errors"):
+        msgs = "; ".join(f"{name}: {msg}" for name, msg in result["errors"][:3])
+        return redirect(url_for("notify_list",
+                                send_error=f"发送到 {notify_url} 失败 — {msgs}"))
+    if result.get("no_new"):
+        return redirect(url_for("notify_list", sent=notify_url, sent_items=0))
+    return redirect(url_for("notify_list", sent=notify_url,
+                            sent_items=result["items"], sent_feeds=result["feeds"]))
+
+
+@app.route("/add-feed", methods=["POST"])
+def add_feed():
+    """Subscribe a notification target to a feed from the notifications page."""
+    notify_url = (request.form.get("notify_url") or "").strip()
+    site = (request.form.get("site") or "").strip()
+    hours = request.form.get("hours") or 24
+    if not site:
+        return redirect(url_for("notify_list", add_error="请选择要添加的订阅源"))
+    status = SUBS.add(site, notify_url, hours)
+    if status == "invalid":
+        return redirect(url_for("notify_list", add_error="请输入有效的通知地址"))
+    return redirect(url_for("notify_list", added=notify_url))
+
+
+# --- Saved notification targets (address book) ----------------------------
+
+@app.route("/notifications/targets")
+def manage_targets():
+    """Manage saved notification targets (address book)."""
+    return render_template("manage_targets.html", targets=NOTIF_TARGETS.list(),
+                           active=None,
+                           added=request.args.get("added"),
+                           add_error=request.args.get("add_error"),
+                           removed=request.args.get("removed"))
+
+
+@app.route("/notifications/targets/add", methods=["POST"])
+def add_target():
+    """Add a saved notification target."""
+    name = (request.form.get("name") or "").strip()
+    url = (request.form.get("url") or "").strip()
+    status = NOTIF_TARGETS.add(name, url)
+    if status == "added":
+        return redirect(url_for("manage_targets", added=name))
+    msg = "该地址已存在" if status == "exists" else "请输入名称和有效的通知地址"
+    return redirect(url_for("manage_targets", add_error=msg))
+
+
+@app.route("/notifications/targets/remove", methods=["POST"])
+def remove_target():
+    """Remove a saved notification target."""
+    url = (request.form.get("url") or "").strip()
+    NOTIF_TARGETS.remove(url)
+    return redirect(url_for("manage_targets", removed=url))
+
+
+@app.route("/playground")
+def playground():
+    # Optional: load configured sites (for nav + ?site= prefill).
+    try:
+        config = load_config(_config_path())
+        sites = config.sites
+    except Exception:
+        sites = []
+
+    # edit=1 is the "opened the edit button" signal. The playground form does
+    # not emit it, so it drops out of the URL after the first Run — which keeps
+    # the saved filter/regex from overriding an unchecked box on re-submit.
+    editing = request.args.get("edit") == "1"
+    site_name = request.args.get("site")
+    site = next((s for s in sites if s.name == site_name), None) if site_name else None
+
+    # Layer defaults: hardcoded -> selected site (selectors always; filter/name/
+    # title/account fields only on an edit-load) -> explicit query args.
+    defaults = dict(PLAYGROUND_DEFAULTS)
+    prefill_type = None
+    if site:
+        prefill_type = site.type
+        defaults["url"] = site.url or ""
+        defaults["proxy"] = site.proxy or ""
+        if site.type == "html":
+            defaults.update(
+                item=site.item or defaults["item"],
+                title_sel=site.fields.get("title", ""),
+                link_sel=site.fields.get("link", ""),
+                date_sel=site.fields.get("date", ""),
+                article_sel=(site.article or {}).get("content", ""),
+            )
+        elif site.type == "wechat":
+            defaults["account_id"] = site.account_id or ""
+            defaults["account_name"] = site.account_name or ""
+        elif site.type == "twitter":
+            defaults["username"] = site.username or ""
+            defaults["account_name"] = site.account_name or ""
+    form = {k: request.args.get(k, v) for k, v in defaults.items()}
+    ptype = request.args.get("type") or prefill_type or "html"
+
+    flt = site.filter if (editing and site) else None
+    inc_def = ", ".join(flt.include) if flt and flt.include else ""
+    exc_def = ", ".join(flt.exclude) if flt and flt.exclude else ""
+    include = request.args.get("include", inc_def)
+    exclude = request.args.get("exclude", exc_def)
+    field = request.args.get("field", flt.field_name if flt and flt.field_name else "title")
+    regex = request.args.get("regex") == "on" or bool(editing and flt and flt.regex)
+    form_name = request.args.get("name") or (site.name if editing and site else "")
+    form_description = request.args.get("description") or (site.description if editing and site else "")
+
+    # wechat/twitter have no live preview (they need their API clients), so the
+    # form is config-only for those types.
+    results = error = source = None
+    kept_n = total = 0
+    if ptype in ("html", "rss"):
+        try:
+            fetcher = FallbackFetcher(FALLBACK_FILES, proxy=normalize_proxy(form.get("proxy")))
+            content = fetcher.get(form["url"])
+            source = fetcher.source
+            if ptype == "rss":
+                items = parse_feed(content, form["url"]).items
+            else:
+                html = content.decode("utf-8", errors="replace")
+                fields = {name: sel for name, sel in
+                          (("title", form["title_sel"]), ("link", form["link_sel"]),
+                           ("date", form["date_sel"])) if sel.strip()}
+                items = extract_items(html, form["url"], form["item"], fields)
+            results = apply_filter(items, include, exclude, field, regex)
+            total = len(results)
+            kept_n = sum(1 for r in results if r["kept"])
+        except Exception as e:
+            error = f"{type(e).__name__}: {e}"
+
+    return render_template(
+        "playground.html",
+        sites=sites, active=None,
+        form=form, ptype=ptype, include=include, exclude=exclude, field=field, regex=regex,
+        form_name=form_name, form_description=form_description, editing_existing=bool(editing and site),
+        results=results, error=error, source=source, total=total, kept_n=kept_n,
+        saved=request.args.get("saved"), save_error=request.args.get("save_error"),
+    )
+
+
+def _load_raw(path):
+    if os.path.exists(path):
+        with open(path, encoding="utf-8") as f:
+            return yaml.safe_load(f) or {}
+    return {}
+
+
+def _form_params(src):
+    """All playground inputs from a form/args, for round-tripping in a redirect."""
+    params = {k: src.get(k, "") for k in
+              ("type", "url", "item", "title_sel", "link_sel", "date_sel", "proxy",
+               "article_sel", "account_id", "account_name", "username",
+               "include", "exclude", "field", "name", "site_title")}
+    if src.get("regex") == "on":
+        params["regex"] = "on"
+    return params
+
+
+# Keys the playground form controls. When updating an existing feed these are
+# replaced from the form; every other saved key (max_items, interval,
+# max_age_days, user_agent, …) is preserved so editing never silently drops it.
+_FORM_KEYS = {"name", "type", "url", "item", "fields", "title", "description", "proxy",
+              "filter", "article", "account_id", "account_name", "username"}
+
+
+def _load_existing_site(save_path, name):
+    """Return the raw saved dict for feed ``name``, or None. Folder mode: the
+    one file per feed (falls back to scanning all yaml files). Single-file: the
+    entry in ``sites``."""
+    sites_yaml = _sites_yaml_path()
+    if sites_yaml:
+        raw = _load_raw(sites_yaml)
+        if isinstance(raw, list):
+            sites = raw
+        elif isinstance(raw, dict):
+            sites = raw.get("sites") or []
+        else:
+            sites = []
+        for s in sites:
+            if s.get("name") == name:
+                return s
+    if os.path.isdir(save_path):
+        files = [Path(save_path) / (re.sub(r"[^\w.-]", "-", name) + ".yaml")]
+        files += list(Path(save_path).glob("*.yaml")) + list(Path(save_path).glob("*.yml"))
+        seen = set()
+        for fp in files:
+            fp = Path(fp)
+            if fp in seen or not fp.exists():
+                continue
+            seen.add(fp)
+            raw = _load_raw(str(fp))
+            if not raw:
+                continue
+            if raw.get("name") == name:
+                return raw
+            for s in raw.get("sites", []) or []:
+                if s.get("name") == name:
+                    return s
+        return None
+    raw = _load_raw(save_path)
+    for s in raw.get("sites", []) or []:
+        if s.get("name") == name:
+            return s
+    return None
+
+
+@app.route("/save", methods=["POST"])
+def save():
+    """Persist the tested selectors + filter from the playground as a config site."""
+    name = (request.form.get("name") or "").strip()
+    if not name:
+        # keep everything the user entered so nothing is lost
+        return redirect(url_for("playground", save_error="a site name is required to save",
+                                **_form_params(request.form)))
+
+    ptype = request.form.get("type", "html")
+    include = request.form.get("include", "")
+    exclude = request.form.get("exclude", "")
+    field = request.form.get("field", "title")
+    regex = request.form.get("regex") == "on"
+
+    # Build the form-controlled subset of the site dict, per type. Keys omitted
+    # here (empty submission) are dropped on update so they can be cleared.
+    site = {"name": name, "type": ptype}
+    if ptype == "wechat":
+        aid = (request.form.get("account_id") or "").strip()
+        if not aid:
+            return redirect(url_for("playground",
+                save_error="wechat feeds need an account_id (公众号 fakeid)",
+                **_form_params(request.form)))
+        site["account_id"] = aid
+        an = (request.form.get("account_name") or "").strip()
+        if an:
+            site["account_name"] = an
+    elif ptype == "twitter":
+        uname = (request.form.get("username") or "").strip()
+        if not uname:
+            return redirect(url_for("playground",
+                save_error="twitter feeds need a username (@handle)",
+                **_form_params(request.form)))
+        site["username"] = uname
+        an = (request.form.get("account_name") or "").strip()
+        if an:
+            site["account_name"] = an
+    else:                                   # html or rss
+        site["url"] = (request.form.get("url") or "").strip()
+        if ptype == "html":
+            site["item"] = (request.form.get("item") or "").strip()
+            site["fields"] = {k: v for k, v in
+                              (("title", (request.form.get("title_sel") or "").strip()),
+                               ("link", (request.form.get("link_sel") or "").strip()),
+                               ("date", (request.form.get("date_sel") or "").strip())) if v}
+            asel = (request.form.get("article_sel") or "").strip()
+            if asel:
+                site["article"] = {"content": asel}
+
+    site_description = (request.form.get("description") or "").strip()
+    if site_description:
+        site["description"] = site_description
+
+    proxy = normalize_proxy(request.form.get("proxy"))
+    if proxy:
+        site["proxy"] = proxy
+
+    flt = {}
+    if parse_terms(include):
+        flt["include"] = parse_terms(include)
+    if parse_terms(exclude):
+        flt["exclude"] = parse_terms(exclude)
+    if field and field != "title":
+        flt["field"] = field
+    if regex:
+        flt["regex"] = True
+    if flt:
+        site["filter"] = flt
+
+    # Updating an existing feed: keep saved fields the form doesn't show
+    # (max_items, interval, max_age_days, …), then apply the form values on top.
+    path = _save_path()
+    existing = _load_existing_site(path, name)
+    if existing:
+        site = {**{k: v for k, v in existing.items() if k not in _FORM_KEYS}, **site}
+
+    try:
+        sites_yaml = _sites_yaml_path()
+        if sites_yaml:
+            # sites.yaml mode: upsert into configs/sites.yaml
+            raw = _load_raw(sites_yaml)
+            if isinstance(raw, list):
+                sites = raw
+            elif isinstance(raw, dict):
+                sites = raw.setdefault("sites", [])
+            else:
+                sites = []
+                raw = sites
+            for i, s in enumerate(sites):
+                if s.get("name") == name:
+                    sites[i] = site
+                    break
+            else:
+                sites.append(site)
+            with open(sites_yaml, "w", encoding="utf-8") as f:
+                yaml.safe_dump(raw, f, allow_unicode=True, sort_keys=False)
+        elif os.path.isdir(path):
+            # folder mode: one file per feed (config/<name>.yaml)
+            fname = re.sub(r"[^\w.-]", "-", name) + ".yaml"
+            with open(os.path.join(path, fname), "w", encoding="utf-8") as f:
+                yaml.safe_dump(site, f, allow_unicode=True, sort_keys=False)
+        else:
+            # single-file mode: upsert into the one config file
+            raw = _load_raw(path) or _load_raw(_config_path())
+            raw.setdefault("output_dir", "./var/feeds")
+            raw.setdefault("state_db", "./var/rssrob.db")
+            raw.setdefault("http", {"host": "127.0.0.1", "port": 8080})
+            sites = raw.setdefault("sites", [])
+            for i, s in enumerate(sites):
+                if s.get("name") == name:
+                    sites[i] = site            # update existing
+                    break
+            else:
+                sites.append(site)             # add new
+            with open(path, "w", encoding="utf-8") as f:
+                yaml.safe_dump(raw, f, allow_unicode=True, sort_keys=False)
+    except OSError as e:
+        return redirect(url_for("playground", save_error=f"could not write {path}: {e}",
+                                **_form_params(request.form)))
+
+    # round-trip back to the playground: selectors load from the saved site,
+    # filter values come back via the query string, plus a success banner.
+    params = {"site": name, "saved": name,
+              "include": include, "exclude": exclude, "field": field}
+    if regex:
+        params["regex"] = "on"
+    return redirect(url_for("playground", **params))
+
+
+# --- WeChat 订阅号 (公众号平台) ---------------------------------------------
+# One shared client across requests; rebuilt when the user logs in via
+# /wechat/login, then reused by search.
+_WECHAT_CLIENT = None
+
+
+def _wechat_client():
+    global _WECHAT_CLIENT
+    if _WECHAT_CLIENT is None:
+        _WECHAT_CLIENT = build_wechat_client()
+    return _WECHAT_CLIENT
+
+
+_TWITTER_CLIENT = None
+
+
+def _twitter_client():
+    global _TWITTER_CLIENT
+    if _TWITTER_CLIENT is None:
+        _TWITTER_CLIENT = build_twitter_client()
+    return _TWITTER_CLIENT
+
+
+def _qr_svg(payload):
+    """Render a payload as an inline SVG QR code string."""
+    import io
+
+    import qrcode
+    import qrcode.image.svg
+    img = qrcode.make(payload, image_factory=qrcode.image.svg.SvgImage)
+    buf = io.BytesIO()
+    img.save(buf)
+    return buf.getvalue().decode("utf-8")
+
+
+def _safe_sites():
+    try:
+        return load_config(_config_path()).sites
+    except Exception:
+        return []
+
+
+def _write_site(site):
+    """Persist one feed dict to the config (sites.yaml; folder: one file; else upsert)."""
+    name = site["name"]
+    path = _save_path()
+    sites_yaml = _sites_yaml_path()
+    if sites_yaml:
+        raw = _load_raw(sites_yaml)
+        # sites.yaml may be a top-level list or a dict with "sites" key
+        if isinstance(raw, list):
+            sites = raw
+        elif isinstance(raw, dict):
+            sites = raw.setdefault("sites", [])
+        else:
+            sites = []
+            raw = sites
+        for i, s in enumerate(sites):
+            if s.get("name") == name:
+                sites[i] = site
+                break
+        else:
+            sites.append(site)
+        with open(sites_yaml, "w", encoding="utf-8") as f:
+            yaml.safe_dump(raw, f, allow_unicode=True, sort_keys=False)
+        return sites_yaml
+    if os.path.isdir(path):
+        fname = re.sub(r"[^\w.-]", "-", name) + ".yaml"
+        out = os.path.join(path, fname)
+        with open(out, "w", encoding="utf-8") as f:
+            yaml.safe_dump(site, f, allow_unicode=True, sort_keys=False)
+        return out
+    raw = _load_raw(path) or _load_raw(_config_path())
+    raw.setdefault("output_dir", "./var/feeds")
+    raw.setdefault("state_db", "./var/rssrob.db")
+    raw.setdefault("http", {"host": "127.0.0.1", "port": 8080})
+    sites = raw.setdefault("sites", [])
+    for i, s in enumerate(sites):
+        if s.get("name") == name:
+            sites[i] = site
+            break
+    else:
+        sites.append(site)
+    with open(path, "w", encoding="utf-8") as f:
+        yaml.safe_dump(raw, f, allow_unicode=True, sort_keys=False)
+    return path
+
+
+def _delete_site_files(save_path, name) -> bool:
+    """Remove feed ``name`` from the config (sites.yaml; folder: drop it from /
+    delete the owning file; single file: drop it from ``sites``). Returns True
+    if found."""
+    sites_yaml = _sites_yaml_path()
+    if sites_yaml:
+        raw = _load_raw(sites_yaml)
+        if isinstance(raw, list):
+            sites = raw
+        elif isinstance(raw, dict):
+            sites = raw.get("sites") or []
+        else:
+            sites = []
+        kept = [s for s in sites if s.get("name") != name]
+        if len(kept) == len(sites):
+            return False
+        if kept:
+            if isinstance(raw, dict):
+                raw["sites"] = kept
+            with open(sites_yaml, "w", encoding="utf-8") as f:
+                yaml.safe_dump(kept if isinstance(raw, list) else raw, f,
+                               allow_unicode=True, sort_keys=False)
+        else:
+            Path(sites_yaml).unlink()
+        return True
+    if os.path.isdir(save_path):
+        removed = False
+        files = list(Path(save_path).glob("*.yaml")) + list(Path(save_path).glob("*.yml"))
+        for fp in files:
+            raw = _load_raw(str(fp))
+            if not raw:
+                continue
+            if "sites" in raw:
+                sites = raw.get("sites") or []
+                kept = [s for s in sites if s.get("name") != name]
+                if len(kept) == len(sites):
+                    continue
+                removed = True
+                if kept or (set(raw) - {"sites"}):       # keep file for its globals
+                    raw["sites"] = kept
+                    with open(fp, "w", encoding="utf-8") as f:
+                        yaml.safe_dump(raw, f, allow_unicode=True, sort_keys=False)
+                else:
+                    fp.unlink()
+            elif raw.get("name") == name:                # single-site file
+                fp.unlink()
+                removed = True
+        return removed
+
+    raw = _load_raw(save_path)
+    sites = raw.get("sites") or []
+    kept = [s for s in sites if s.get("name") != name]
+    if len(kept) == len(sites):
+        return False
+    raw["sites"] = kept
+    with open(save_path, "w", encoding="utf-8") as f:
+        yaml.safe_dump(raw, f, allow_unicode=True, sort_keys=False)
+    return True
+
+
+def _delete_feed_artifacts(name) -> None:
+    """Best-effort cleanup after removing a feed: its generated XML + subscribers."""
+    try:
+        output_dir = load_config(_config_path()).output_dir
+    except Exception:
+        output_dir = "./var/feeds"
+    out = Path(output_dir)
+    if not out.is_absolute():
+        out = REPO_ROOT / out
+    try:
+        (out / f"{name}.xml").unlink()
+    except OSError:
+        pass
+    try:
+        for email in SUBS.list(name):
+            SUBS.remove(name, email)
+    except Exception:
+        pass
+
+
+@app.route("/wechat/login")
+def wechat_login():
+    """Show a QR to open the 公众号 backend, plus a cookie+token capture.
+
+    The working flow is: log in at mp.weixin.qq.com (your own 公众号), then paste
+    the session cookie and the token from the URL here."""
+    cred = load_credential(WECHAT_CRED_PATH)
+    return render_template(
+        "wechat_login.html", active=None, sites=_safe_sites(),
+        login_url=MP_LOGIN_URL, qr_svg=_qr_svg(MP_LOGIN_URL),
+        logged_in_token=(cred.token if cred else None),
+        pasted=request.args.get("pasted"), paste_error=request.args.get("paste_error"))
+
+
+@app.route("/wechat/paste", methods=["POST"])
+def wechat_paste():
+    """Save a 公众号 credential from a pasted cookie + token."""
+    global _WECHAT_CLIENT
+    cookie = (request.form.get("cookie") or "").strip()
+    token = (request.form.get("token") or "").strip()
+    try:
+        cred = credential_from_login(cookie, token, time.time())
+    except ValueError as e:
+        return redirect(url_for("wechat_login", paste_error=str(e)))
+    save_credential(WECHAT_CRED_PATH, cred)
+    _WECHAT_CLIENT = None        # rebuild the shared client with the new credential
+    return redirect(url_for("wechat_login", pasted=cred.token))
+
+
+@app.route("/wechat/search", methods=["POST"])
+def wechat_search():
+    name = (request.form.get("name") or "").strip()
+    if not name:
+        return jsonify({"accounts": []})
+    try:
+        accounts = _wechat_client().search_accounts(name)
+    except WeChatAuthError:
+        return jsonify({"error": "not logged in — log in above first"})
+    except Exception as e:
+        return jsonify({"error": str(e)})
+    return jsonify({"accounts": [{"id": a.id, "name": a.name, "avatar": a.avatar,
+                                  "desc": a.description} for a in accounts]})
+
+
+@app.route("/wechat/save", methods=["POST"])
+def wechat_save():
+    name = (request.form.get("name") or "").strip()
+    account_id = (request.form.get("account_id") or "").strip()
+    account_name = (request.form.get("account_name") or "").strip()
+    account_description = (request.form.get("account_description") or "").strip()
+    if not name or not account_id:
+        return jsonify({"error": "feed name and account_id are required"})
+    site = {"name": name, "type": "wechat", "account_id": account_id,
+            "account_name": account_name}
+    if account_description:                       # the 公众号's intro -> feed <description>
+        site["description"] = account_description
+    interval = request.form.get("interval")
+    if interval:
+        try:
+            site["interval"] = int(interval)
+        except ValueError:
+            pass
+    try:
+        path = _write_site(site)
+    except OSError as e:
+        return jsonify({"error": f"could not write config: {e}"})
+    return jsonify({"saved": name, "path": path})
+
+
+def _is_wechat_id(val: str) -> bool:
+    """Heuristic: looks like a WeChat fakeid (Base64-ish, ≥10 chars, may contain =)."""
+    return bool(re.match(r'^[A-Za-z0-9+/=]{10,}$', val))
+
+
+@app.route("/wechat/batch-search", methods=["POST"])
+def wechat_batch_search():
+    """Look up a list of WeChat fakeids or names, return enriched results."""
+    raw = (request.form.get("ids") or "").strip()
+    if not raw:
+        return jsonify({"results": []})
+    lines = [l.strip() for l in raw.splitlines() if l.strip()]
+    results = []
+    try:
+        client = _wechat_client()
+    except Exception as e:
+        return jsonify({"error": str(e)})
+    for line in lines:
+        if _is_wechat_id(line):
+            results.append({"id": line, "name": "", "desc": "",
+                            "source": "direct", "checked": True})
+        else:
+            try:
+                accounts = client.search_accounts(line)
+                if accounts:
+                    a = accounts[0]
+                    results.append({"id": a.id, "name": a.name or "",
+                                    "desc": a.description or "",
+                                    "source": "search", "checked": True})
+                else:
+                    results.append({"id": "", "name": line, "desc": "",
+                                    "source": "not_found", "checked": False})
+            except WeChatAuthError:
+                return jsonify({"error": "not logged in — log in above first"})
+            except Exception as e:
+                results.append({"id": "", "name": line, "desc": "",
+                                "source": "error", "checked": False,
+                                "error": str(e)})
+    return jsonify({"results": results})
+
+
+@app.route("/wechat/batch-save", methods=["POST"])
+def wechat_batch_save():
+    """Save multiple WeChat feeds at once."""
+    data = request.get_json(silent=True) or []
+    if not isinstance(data, list):
+        return jsonify({"error": "expected a JSON array"}), 400
+    saved, errors = 0, []
+    for item in data:
+        name = (item.get("name") or "").strip()
+        account_id = (item.get("account_id") or "").strip()
+        if not name or not account_id:
+            errors.append(f"skipped: name={name!r} (missing name or account_id)")
+            continue
+        site = {"name": name, "type": "wechat", "account_id": account_id,
+                "account_name": (item.get("account_name") or "").strip()}
+        desc = (item.get("description") or "").strip()
+        if desc:
+            site["description"] = desc
+        try:
+            _write_site(site)
+            saved += 1
+        except Exception as e:
+            errors.append(f"{name}: {e}")
+    return jsonify({"saved": saved, "errors": errors})
+
+
+@app.route("/twitter/batch-lookup", methods=["POST"])
+def twitter_batch_lookup():
+    """Look up a list of Twitter handles, return enriched results."""
+    raw = (request.form.get("handles") or "").strip()
+    if not raw:
+        return jsonify({"results": []})
+    lines = [l.strip().lstrip("@") for l in raw.splitlines() if l.strip()]
+    results = []
+    try:
+        client = _twitter_client()
+    except Exception as e:
+        return jsonify({"error": str(e)})
+    for handle in lines:
+        try:
+            account = client.resolve_user(handle)
+            if account and account.id:
+                results.append({"handle": account.handle, "name": account.name or "",
+                                "id": account.id,
+                                "description": account.description or "",
+                                "checked": True})
+            else:
+                results.append({"handle": handle, "name": "", "id": "",
+                                "description": "", "checked": False,
+                                "error": f"@{handle} not found"})
+        except TwitterAuthError:
+            return jsonify({"error": "not logged in — paste your cookie above first"})
+        except Exception as e:
+            results.append({"handle": handle, "name": "", "id": "",
+                            "description": "", "checked": False,
+                            "error": str(e)})
+    return jsonify({"results": results})
+
+
+@app.route("/twitter/batch-save", methods=["POST"])
+def twitter_batch_save():
+    """Save multiple Twitter feeds at once."""
+    data = request.get_json(silent=True) or []
+    if not isinstance(data, list):
+        return jsonify({"error": "expected a JSON array"}), 400
+    saved, errors = 0, []
+    try:
+        client = _twitter_client()
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    for item in data:
+        handle = (item.get("handle") or "").strip().lstrip("@")
+        name = (item.get("name") or "").strip()
+        if not handle or not name:
+            errors.append(f"skipped: handle={handle!r} name={name!r}")
+            continue
+        try:
+            account = client.resolve_user(handle)
+            if not account or not account.id:
+                errors.append(f"@{handle}: not found")
+                continue
+        except Exception as e:
+            errors.append(f"@{handle}: {e}")
+            continue
+        site = {"name": name, "type": "twitter", "username": account.handle,
+                "account_id": account.id, "account_name": account.name}
+        if account.description:
+            site["description"] = account.description
+        try:
+            _write_site(site)
+            saved += 1
+        except Exception as e:
+            errors.append(f"{name}: {e}")
+    return jsonify({"saved": saved, "errors": errors})
+
+
+@app.route("/delete-feed", methods=["POST"])
+def delete_feed():
+    """Remove a feed: drop it from the config and clean up its generated XML +
+    subscribers. (Item history in the SQLite store is left intact.)"""
+    name = (request.form.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "feed name required"}), 400
+    try:
+        removed = _delete_site_files(_save_path(), name)
+    except OSError as e:
+        return jsonify({"error": f"could not update config: {e}"}), 500
+    if not removed:
+        return jsonify({"error": f"no such feed: {name}"}), 404
+    _delete_feed_artifacts(name)
+    return jsonify({"deleted": name})
+
+
+@app.route("/delete-feeds", methods=["POST"])
+def delete_feeds():
+    """Remove several feeds at once. Names come from repeated ``name`` fields
+    and/or a comma/newline-separated ``names`` field. Returns which were deleted
+    and which weren't found."""
+    names = request.form.getlist("name") + parse_terms(request.form.get("names", ""))
+    names = list(dict.fromkeys(n.strip() for n in names if n.strip()))  # de-dup, ordered
+    if not names:
+        return jsonify({"error": "no feed names given"}), 400
+    deleted, not_found = [], []
+    for name in names:
+        try:
+            removed = _delete_site_files(_save_path(), name)
+        except OSError as e:
+            return jsonify({"error": f"could not update config: {e}",
+                            "deleted": deleted}), 500
+        if removed:
+            _delete_feed_artifacts(name)
+            deleted.append(name)
+        else:
+            not_found.append(name)
+    return jsonify({"deleted": deleted, "not_found": not_found})
+
+
+# --- Twitter / X ------------------------------------------------------------
+
+@app.route("/twitter/login")
+def twitter_login():
+    """Paste an x.com session cookie (auth_token + ct0) to read tweets."""
+    cred = load_twitter_credential(TWITTER_CRED_PATH)
+    return render_template(
+        "twitter_login.html", active=None, sites=_safe_sites(),
+        login_url=X_LOGIN_URL, logged_in=bool(cred),
+        pasted=request.args.get("pasted"),
+        paste_error=request.args.get("paste_error"))
+
+
+@app.route("/twitter/paste", methods=["POST"])
+def twitter_paste():
+    """Save an X credential from a pasted cookie (+ optional proxy)."""
+    global _TWITTER_CLIENT
+    cookie = (request.form.get("cookie") or "").strip()
+    proxy = (request.form.get("proxy") or "").strip()
+    try:
+        cred = credential_from_cookie(cookie, time.time(), proxy=proxy or None)
+    except ValueError as e:
+        return redirect(url_for("twitter_login", paste_error=str(e)))
+    save_twitter_credential(TWITTER_CRED_PATH, cred)
+    _TWITTER_CLIENT = None        # rebuild the shared client with the new credential
+    return redirect(url_for("twitter_login", pasted="1"))
+
+
+@app.route("/twitter/lookup", methods=["POST"])
+def twitter_lookup():
+    """Preview an account before saving: its bio + a few latest posts."""
+    handle = (request.form.get("handle") or "").strip().lstrip("@")
+    if not handle:
+        return jsonify({"error": "enter a @handle"})
+    try:
+        client = _twitter_client()
+        account = client.resolve_user(handle)
+        if not account.id:
+            return jsonify({"error": f"no such account: @{handle}"})
+        tweets = [{"text": it.summary or it.title, "link": it.link, "date": it.date}
+                  for it in client.to_items(client.list_tweets(account.id, 3))]
+    except TwitterAuthError:
+        return jsonify({"error": "not logged in — paste your cookie above first"})
+    except Exception as e:
+        return jsonify({"error": str(e)})
+    return jsonify({"account": {"id": account.id, "name": account.name,
+                                "handle": account.handle,
+                                "description": account.description},
+                    "tweets": tweets})
+
+
+@app.route("/twitter/save", methods=["POST"])
+def twitter_save():
+    handle = (request.form.get("handle") or "").strip().lstrip("@")
+    name = (request.form.get("name") or "").strip()
+    if not handle or not name:
+        return jsonify({"error": "feed name and @handle are required"})
+    try:
+        account = _twitter_client().resolve_user(handle)
+    except TwitterAuthError:
+        return jsonify({"error": "not logged in — paste your cookie above first"})
+    except Exception as e:
+        return jsonify({"error": str(e)})
+    if not account.id:
+        return jsonify({"error": f"no such account: @{handle}"})
+    site = {"name": name, "type": "twitter", "username": account.handle,
+            "account_id": account.id, "account_name": account.name}
+    if account.description:
+        site["description"] = account.description
+    try:
+        path = _write_site(site)
+    except OSError as e:
+        return jsonify({"error": f"could not write config: {e}"})
+    return jsonify({"saved": name, "path": path})
+
+
+# --- Backup / restore -------------------------------------------------------
+# A backup bundles the active config + the whole var/ tree (SQLite item history,
+# generated feeds, subscribers, digest state, 公众号 credential) into one zip, so
+# the instance can be moved or rebuilt. Restore extracts it back into place.
+
+
+def _backup_sources():
+    """Paths (under REPO_ROOT) to include in a backup: active config + var/."""
+    sources = []
+    cfg = Path(_config_path())
+    if cfg.name != "config.example.yaml" and cfg.exists():
+        sources.append(cfg)                       # configs/ dir or config.yaml
+    var_dir = REPO_ROOT / "var"
+    if var_dir.exists():
+        sources.append(var_dir)
+    return sources
+
+
+@app.route("/about")
+def about():
+    return render_template("about.html", active=None, sites=_safe_sites())
+
+
+@app.route("/backup")
+def backup_page():
+    return render_template("backup.html", active=None, sites=_safe_sites(),
+                           restored=request.args.get("restored"),
+                           restore_error=request.args.get("restore_error"))
+
+
+@app.route("/backup/download")
+def backup_download():
+    data = build_backup(REPO_ROOT, _backup_sources())
+    fname = "rssrob-backup-" + time.strftime("%Y%m%d-%H%M%S") + ".zip"
+    return send_file(io.BytesIO(data), mimetype="application/zip",
+                     as_attachment=True, download_name=fname)
+
+
+@app.route("/backup/restore", methods=["POST"])
+def backup_restore():
+    f = request.files.get("backup")
+    if not f or not f.filename:
+        return redirect(url_for("backup_page", restore_error="choose a backup .zip file"))
+    try:
+        names = restore_backup(REPO_ROOT, f.read())
+    except ValueError as e:
+        return redirect(url_for("backup_page", restore_error=str(e)))
+    return redirect(url_for("backup_page", restored=len(names)))
+
+
+def resolve_proxy(proxy, proxy_port, proxy_host="127.0.0.1", proxy_scheme="http"):
+    """Build a proxy URL: an explicit --proxy wins, else <scheme>://<host>:<port>."""
+    if proxy:
+        return proxy
+    if proxy_port:
+        return f"{proxy_scheme}://{proxy_host}:{proxy_port}"
+    return None
+
+
+def _build_arg_parser():
+    p = argparse.ArgumentParser(description="RSSRob preview web app")
+    p.add_argument("--host", default="127.0.0.1", help="webapp bind host")
+    p.add_argument("--port", type=int, default=5000, help="webapp port (default 5000)")
+    p.add_argument("--proxy", metavar="URL",
+                   help="full proxy URL for outbound fetches, e.g. "
+                        "http://127.0.0.1:7890 or socks5://127.0.0.1:1080")
+    p.add_argument("--proxy-port", type=int, metavar="N",
+                   help="shorthand for a proxy at <proxy-host>:N")
+    p.add_argument("--proxy-host", default="127.0.0.1",
+                   help="proxy host used with --proxy-port (default 127.0.0.1)")
+    p.add_argument("--proxy-scheme", default="http",
+                   choices=["http", "https", "socks5", "socks5h"],
+                   help="proxy scheme used with --proxy-port (default http)")
+    p.add_argument("--https", action="store_true",
+                   help="serve over HTTPS with an adhoc self-signed cert "
+                        "(needs the cryptography library; see requirements-web.txt)")
+    p.add_argument("--tls-cert", metavar="PATH",
+                   help="PEM cert file to serve HTTPS with a stable, browser-"
+                        "trusted cert (e.g. from mkcert); requires --tls-key. "
+                        "Overrides --https when both are given.")
+    p.add_argument("--tls-key", metavar="PATH",
+                   help="PEM private key matching --tls-cert")
+    return p
+
+
+def resolve_ssl_context(https, tls_cert=None, tls_key=None):
+    """Choose a Werkzeug ``ssl_context`` from the HTTPS CLI flags.
+
+    - both ``tls_cert`` and ``tls_key`` -> ``(cert, key)`` for file-based TLS
+      (a stable cert you can make browser-trusted, e.g. with mkcert); this
+      takes precedence over ``--https``.
+    - ``https`` alone -> ``"adhoc"`` (a fresh self-signed cert each run).
+    - neither -> ``None`` (plain HTTP).
+
+    Raises ValueError if only one of cert/key is given.
+    """
+    if bool(tls_cert) ^ bool(tls_key):
+        raise ValueError("--tls-cert and --tls-key must be used together")
+    if tls_cert:
+        return (tls_cert, tls_key)
+    return "adhoc" if https else None
+
+
+if __name__ == "__main__":
+    parser = _build_arg_parser()
+    args = parser.parse_args()
+
+    PROXY_URL = normalize_proxy(resolve_proxy(args.proxy, args.proxy_port,
+                                              args.proxy_host, args.proxy_scheme))
+    if PROXY_URL:
+        print(f"default proxy for feeds without their own: {PROXY_URL}")
+        if PROXY_URL.startswith("socks"):
+            try:
+                import socks  # noqa: F401  (PySocks)
+            except ImportError:
+                print("  note: SOCKS proxies need PySocks → pip install 'requests[socks]'")
+
+    # --tls-cert/--tls-key serve a stable, browser-trusted cert; --https falls
+    # back to a fresh adhoc self-signed cert each run (cryptography library).
+    try:
+        ssl_context = resolve_ssl_context(args.https, args.tls_cert, args.tls_key)
+    except ValueError as exc:
+        parser.error(str(exc))
+    if ssl_context == "adhoc":
+        print("serving over HTTPS (adhoc self-signed cert; browsers warn once)")
+    elif ssl_context:
+        print(f"serving over HTTPS with cert {args.tls_cert}")
+    # threaded=True so the dev server handles requests concurrently. Without it
+    # (Werkzeug's default is threaded=False) a single slow page load — the index
+    # route does one network fetch per feed item — blocks every other connection
+    # until it times out, so the site appears unreachable.
+    # The scheduler is already started at module level (_start_scheduler).
+    use_reloader = True
+    app.run(host=args.host, port=args.port, ssl_context=ssl_context,
+            debug=False, use_debugger=False, threaded=True, use_reloader=use_reloader)

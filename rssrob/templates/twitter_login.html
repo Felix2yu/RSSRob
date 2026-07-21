@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+{% block title %}X / Twitter · RSSRob{% endblock %}
+{% block content %}
+<h2 style="margin:.2rem 0 1rem">X / Twitter 订阅</h2>
+
+{% if logged_in %}
+  <div class="meta" style="border-left:4px solid var(--green);">
+    ✅ cookie 已保存。在下方添加账号。会话过期时重新粘贴即可。
+  </div>
+{% endif %}
+{% if pasted %}
+  <div class="meta" style="border-left:4px solid var(--green);">✅ 凭证已保存。</div>
+{% endif %}
+{% if paste_error %}<div class="error">⚠️ {{ paste_error }}</div>{% endif %}
+
+<div class="notice">
+  <strong>RSSRob 使用您自己的已登录会话读取 X。</strong>它调用 x.com 网站使用的
+  相同 Web API，发送您的 <code>auth_token</code> + <code>ct0</code> cookie。
+  不会发布任何内容；cookie 保存在本地
+  （<code>var/twitter_credential.json</code>，已 gitignore）。过期后重新粘贴即可。
+</div>
+
+<div style="max-width:640px;">
+  <p style="margin:.1rem 0 .5rem; font-weight:600;">登录
+    <a href="{{ login_url }}" target="_blank">x.com</a> 后，获取您的 cookie：</p>
+  <ol style="padding-left:1.1rem; line-height:1.7;">
+    <li>开发者工具 (F12) → <b>网络</b> → 点击任意对
+      <code>x.com</code> 的请求 → <b>标头</b> → <b>请求标头</b> → 复制整个
+      <code>Cookie</code> 值。</li>
+    <li>⚠️ 不要使用 <code>document.cookie</code> —— <code>auth_token</code> 是
+      <code>HttpOnly</code> 的，不会显示在那里。</li>
+  </ol>
+  <form method="post" action="{{ url_for('twitter_paste') }}">
+    <label class="count">cookie (the full Cookie header)</label>
+    <textarea name="cookie" rows="3"
+      placeholder="auth_token=...; ct0=...; guest_id=...; ..."
+      style="width:100%; font:13px monospace; border:1px solid var(--line);
+      border-radius:6px; padding:.5rem;"></textarea>
+    <label class="count" style="display:block; margin-top:.4rem;">proxy (optional)</label>
+    <input name="proxy" placeholder="e.g. 7890 or socks5://127.0.0.1:1080"
+           style="width:100%; padding:.4rem; border:1px solid var(--line);
+           border-radius:6px; font:13px monospace;">
+    <button style="margin-top:.5rem; padding:.45rem .9rem;">保存凭证</button>
+  </form>
+</div>
+
+<hr style="border:none; border-top:1px solid var(--line); margin:1.5rem 0;">
+
+<h3 style="margin:.2rem 0 .6rem">添加账号</h3>
+<form id="add-form" onsubmit="return false;">
+  <input id="handle" type="text" placeholder="@用户名，如 elonmusk"
+         style="padding:.45rem .6rem; border:1px solid var(--line); border-radius:6px;">
+  <button id="lookup-btn" style="padding:.45rem .9rem;">查找</button>
+  <span id="lookup-note" class="count"></span>
+</form>
+
+<div id="preview" style="margin-top:1rem;"></div>
+
+<hr style="border:none; border-top:1px solid var(--line); margin:1.5rem 0;">
+
+<h3 style="margin:.2rem 0 .6rem">批量添加</h3>
+<p class="count" style="margin:.1rem 0 .5rem;">每行一个 @用户名（可带或不带 @）。</p>
+<textarea id="batch-handles" rows="5" placeholder="每行一个 @用户名，例如：&#10;elonmusk&#10;@kaboroevich"
+          style="width:100%; font:13px monospace; border:1px solid var(--line);
+          border-radius:6px; padding:.5rem;"></textarea>
+<button id="batch-lookup-btn" style="margin-top:.5rem; padding:.45rem .9rem;">批量查找</button>
+<span id="batch-note" class="count" style="margin-left:.5rem;"></span>
+<div id="batch-results" style="margin-top:1rem;"></div>
+
+<script>
+const TW_LOOKUP = "{{ url_for('twitter_lookup') }}";
+const TW_SAVE = "{{ url_for('twitter_save') }}";
+
+function esc(s) {
+  const d = document.createElement("div"); d.textContent = s == null ? "" : s;
+  return d.innerHTML;
+}
+
+document.getElementById("lookup-btn").addEventListener("click", async () => {
+  const handle = document.getElementById("handle").value.trim().replace(/^@/, "");
+  const note = document.getElementById("lookup-note");
+  const box = document.getElementById("preview");
+  if (!handle) { note.textContent = "请输入 @用户名"; return; }
+  note.textContent = "查找中…"; box.innerHTML = "";
+  const fd = new FormData(); fd.append("handle", handle);
+  const r = await fetch(TW_LOOKUP, { method: "POST", body: fd });
+  const d = await r.json();
+  note.textContent = "";
+  if (d.error) { box.innerHTML = "<div class='notice'>⚠️ " + esc(d.error) + "</div>"; return; }
+
+  const a = d.account;
+  let posts = "";
+  if (d.tweets && d.tweets.length) {
+    posts = "<div class='count' style='margin:.6rem 0 .2rem;'>最新推文：</div><ul style='margin:.2rem 0; padding-left:1.1rem; line-height:1.6;'>";
+    for (const t of d.tweets) {
+      const when = t.date ? ("<span class='count'> · " + esc(t.date.slice(0, 16).replace('T', ' ')) + "</span>") : "";
+      const text = esc((t.text || "").slice(0, 140));
+      posts += "<li><a href='" + esc(t.link) + "' target='_blank'>" + text + "</a>" + when + "</li>";
+    }
+    posts += "</ul>";
+  } else {
+    posts = "<div class='count' style='margin-top:.5rem;'>未找到最近的推文。</div>";
+  }
+
+  box.innerHTML =
+    "<div class='meta'>" +
+      "<div><b>" + esc(a.name || ("@" + a.handle)) + "</b> " +
+        "<span class='count'>@" + esc(a.handle) + " · id " + esc(a.id) + "</span></div>" +
+      (a.description ? "<div style='margin-top:.25rem;'>" + esc(a.description) + "</div>" : "") +
+      posts +
+      "<div style='margin-top:.7rem;'>订阅源名称：" +
+        "<input class='fn' value='" + esc(a.handle) + "' style='padding:.3rem;border:1px solid var(--line);border-radius:5px;'> " +
+        "<button class='save' style='padding:.35rem .8rem;'>保存为订阅源</button> " +
+        "<span class='saved count'></span></div>" +
+    "</div>";
+
+  box.querySelector(".save").addEventListener("click", async () => {
+    const feed = box.querySelector(".fn").value.trim();
+    const saved = box.querySelector(".saved");
+    if (!feed) { saved.textContent = "请输入订阅源名称"; return; }
+    const sf = new FormData(); sf.append("handle", a.handle); sf.append("name", feed);
+    const sr = await fetch(TW_SAVE, { method: "POST", body: sf });
+    const sd = await sr.json();
+    saved.textContent = sd.error ? ("⚠️ " + sd.error) : ("✅ saved → " + sd.path);
+  });
+});
+
+// --- Batch lookup ---
+document.getElementById("batch-lookup-btn").addEventListener("click", async () => {
+  const handles = document.getElementById("batch-handles").value.trim();
+  const note = document.getElementById("batch-note");
+  const box = document.getElementById("batch-results");
+  if (!handles) { box.innerHTML = ""; note.textContent = ""; return; }
+  note.textContent = "查找中..."; box.innerHTML = "";
+  const fd = new FormData(); fd.append("handles", handles);
+  const r = await fetch("{{ url_for('twitter_batch_lookup') }}", { method: "POST", body: fd });
+  const d = await r.json();
+  note.textContent = "";
+  if (d.error) { box.innerHTML = "<div class='notice'>⚠️ " + esc(d.error) + "</div>"; return; }
+  if (!d.results || !d.results.length) { box.innerHTML = "<p class='count'>无结果。</p>"; return; }
+
+  let html = "<table><thead><tr><th></th><th>Handle</th><th>名称</th><th>描述</th><th>订阅源名称</th></tr></thead><tbody>";
+  for (let i = 0; i < d.results.length; i++) {
+    const r = d.results[i];
+    const defaultName = r.handle || "";
+    html += "<tr>" +
+      "<td><input type='checkbox' class='batch-cb' data-idx='" + i + "' " + (r.checked ? "checked" : "") + "></td>" +
+      "<td>@" + esc(r.handle) + "</td>" +
+      "<td>" + esc(r.name || (r.error ? "未找到" : "")) + "</td>" +
+      "<td class='count'>" + esc(r.description || r.error || "") + "</td>" +
+      "<td><input class='batch-name' data-idx='" + i + "' value='" + esc(defaultName) + "' " +
+      "style='padding:.3rem;border:1px solid var(--line);border-radius:5px;width:100%;'></td>" +
+      "</tr>";
+  }
+  html += "</tbody></table>";
+  html += "<button id='batch-save-btn' style='margin-top:.6rem;'>批量保存选中项</button> <span id='batch-save-note' class='count'></span>";
+  box.innerHTML = html;
+  box._raw = d.results;
+
+  document.getElementById("batch-save-btn").addEventListener("click", async () => {
+    const saveNote = document.getElementById("batch-save-note");
+    const cbs = document.querySelectorAll(".batch-cb");
+    const toSave = [];
+    cbs.forEach(cb => {
+      if (!cb.checked) return;
+      const idx = parseInt(cb.dataset.idx);
+      const item = box._raw[idx];
+      const nameInput = document.querySelector(".batch-name[data-idx='" + idx + "']");
+      toSave.push({
+        handle: item.handle,
+        name: (nameInput ? nameInput.value.trim() : "") || item.handle
+      });
+    });
+    if (!toSave.length) { saveNote.textContent = "请至少勾选一项"; return; }
+    saveNote.textContent = "保存中...";
+    const sr = await fetch("{{ url_for('twitter_batch_save') }}", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(toSave)
+    });
+    const sd = await sr.json();
+    if (sd.error) { saveNote.textContent = "⚠️ " + sd.error; return; }
+    saveNote.textContent = "✅ 已保存 " + sd.saved + " 个" +
+      (sd.errors.length ? "，" + sd.errors.length + " 个失败" : "");
+  });
+});
+</script>
+{% endblock %}
