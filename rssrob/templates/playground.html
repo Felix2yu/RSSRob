@@ -43,6 +43,36 @@
     站点导航中，并被 <code>rssrob serve</code> 使用。</div>{% endif %}
   {% if save_error %}<div class="error">{{ save_error }}</div>{% endif %}
 
+  {% if sites %}
+  <div style="margin-bottom:1rem; padding:.7rem .9rem; background:var(--card);
+              border:1px solid var(--line); border-radius:var(--radius);
+              box-shadow:var(--shadow);">
+    <label style="display:block; font:600 .66rem/1 var(--mono); letter-spacing:.14em;
+                  text-transform:uppercase; color:var(--muted); margin-bottom:.3rem;">
+      编辑已有订阅</label>
+    <div style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap;">
+      <select id="edit-site" style="flex:1; min-width:200px; padding:.45rem .6rem;
+              border:1px solid var(--line); border-radius:7px; font-size:.9rem;">
+        <option value="" disabled selected>选择一个订阅…</option>
+        {% for s in sites %}
+          <option value="{{ s.name }}" {{ 'selected' if form_name == s.name else '' }}>
+            {{ s.description or s.title or s.name }} ({{ s.type }})
+          </option>
+        {% endfor %}
+      </select>
+      <button type="button" id="edit-site-btn" style="padding:.45rem .9rem;">加载编辑</button>
+    </div>
+  </div>
+  <script>
+    document.getElementById("edit-site-btn").addEventListener("click", function() {
+      var sel = document.getElementById("edit-site");
+      if (sel.value) {
+        window.location.href = "{{ url_for('playground') }}?site=" + encodeURIComponent(sel.value) + "&edit=1";
+      }
+    });
+  </script>
+  {% endif %}
+
   <form class="pg" method="get" action="{{ url_for('playground') }}">
     <label>订阅类型</label>
     <div class="typesel">
