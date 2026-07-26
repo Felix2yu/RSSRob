@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import threading
@@ -19,6 +20,49 @@ from .wechat_credential import DEFAULT_PATH, load
 log = logging.getLogger("rssrob.scheduler")
 
 _RATE_LIMIT_BACKOFF = 1800   # extra seconds to wait after mp.weixin freq control
+_AUTH_NOTIFY_COOLDOWN = 86400  # seconds between auth-expiry notifications (24 h)
+_AUTH_NOTIFY_STATE_PATH = os.path.join("var", "auth_notify_state.json")
+
+
+class _AuthNotifyTracker:
+    """Rate-limit auth-expiry notifications to once per cooldown period.
+
+    Uses a JSON file on disk so that multiple worker processes (e.g. gunicorn)
+    share the same cooldown state."""
+
+    def __init__(self, cooldown: int = _AUTH_NOTIFY_COOLDOWN,
+                 path: str = _AUTH_NOTIFY_STATE_PATH):
+        self._cooldown = cooldown
+        self._path = path
+
+    def _load(self) -> dict[str, float]:
+        if not os.path.exists(self._path):
+            return {}
+        try:
+            with open(self._path, encoding="utf-8") as f:
+                return json.load(f) or {}
+        except (json.JSONDecodeError, OSError):
+            return {}
+
+    def _save(self, data: dict[str, float]) -> None:
+        directory = os.path.dirname(self._path) or "."
+        os.makedirs(directory, exist_ok=True)
+        tmp = self._path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+        os.replace(tmp, self._path)
+
+    def should_send(self, service: str, now: float) -> bool:
+        data = self._load()
+        last = data.get(service, 0.0)
+        if now - last < self._cooldown:
+            return False
+        data[service] = now
+        self._save(data)
+        return True
+
+
+_auth_notify_tracker = _AuthNotifyTracker()
 
 
 def build_wechat_client() -> WeChatClient:
@@ -48,7 +92,14 @@ _NOTIFY_PATH = os.path.join("var", "subscribers.json")
 
 
 def _notify_auth_error(service, error):
-    """Send a notification about token expiration to configured targets."""
+    """Send a notification about token expiration to configured targets.
+
+    Notifications are rate-limited to once per cooldown period per service
+    (default 24 h) to avoid flooding when the scheduler retries frequently.
+    Sends to only one target to avoid duplicate messages."""
+    now = time.time()
+    if not _auth_notify_tracker.should_send(service, now):
+        return
     try:
         subs = Subscribers(_NOTIFY_PATH)
         if not subs.auth_notify_enabled():
@@ -57,9 +108,11 @@ def _notify_auth_error(service, error):
         targets = explicit if explicit else subs.all_target_urls()
         if not targets:
             return
+        # Send to only one target to avoid duplicate messages
+        target = targets[0]
         title = "[RSSRob] " + service + " 会话过期"
         body = service + " 的登录凭证已过期，请重新登录。\n\n错误信息：" + str(error)
-        send_notification(targets, title, body)
+        send_notification([target], title, body)
     except Exception:
         pass  # best-effort
 
