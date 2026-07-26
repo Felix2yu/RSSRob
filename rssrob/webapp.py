@@ -131,7 +131,9 @@ PLAYGROUND_DEFAULTS = {
     "username": "",        # twitter: @handle (no leading @)
 }
 
-app = Flask(__name__, template_folder=str(Path(__file__).parent / "templates"))
+_STATIC_DIR = str(Path(__file__).parent / "static")
+app = Flask(__name__, template_folder=str(Path(__file__).parent / "templates"),
+            static_folder=_STATIC_DIR, static_url_path="/static")
 
 # Admin login credential (gitignored, under var/). When present it gates the
 # whole UI; absent means "open mode" (today's behavior) with a setup banner.
