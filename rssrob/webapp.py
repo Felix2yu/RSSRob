@@ -834,9 +834,15 @@ def _load_existing_site(save_path, name):
             raw = _load_raw(str(fp))
             if not raw:
                 continue
-            if raw.get("name") == name:
-                return raw
-            for s in raw.get("sites", []) or []:
+            if isinstance(raw, list):
+                sites = raw
+            elif isinstance(raw, dict):
+                if raw.get("name") == name:
+                    return raw
+                sites = raw.get("sites") or []
+            else:
+                sites = []
+            for s in sites:
                 if s.get("name") == name:
                     return s
         return None
@@ -1097,7 +1103,18 @@ def _delete_site_files(save_path, name) -> bool:
             raw = _load_raw(str(fp))
             if not raw:
                 continue
-            if "sites" in raw:
+            if isinstance(raw, list):
+                sites = raw
+                kept = [s for s in sites if s.get("name") != name]
+                if len(kept) == len(sites):
+                    continue
+                removed = True
+                if kept:
+                    with open(fp, "w", encoding="utf-8") as f:
+                        yaml.safe_dump(kept, f, allow_unicode=True, sort_keys=False)
+                else:
+                    fp.unlink()
+            elif "sites" in raw:
                 sites = raw.get("sites") or []
                 kept = [s for s in sites if s.get("name") != name]
                 if len(kept) == len(sites):

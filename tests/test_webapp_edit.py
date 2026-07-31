@@ -160,6 +160,24 @@ def test_save_twitter_writes_username(tmp_path):
     assert raw["account_name"] == "Elon"
 
 
+def test_save_with_list_top_level_sites_yaml(tmp_path):
+    """/save must not crash when the config folder holds a top-level list file
+    (sites.yaml) alongside single-site yaml files."""
+    wa = _load_webapp()
+    client, d = _app(wa, tmp_path, {
+        "sites.yaml": ("- name: existing\n  type: html\n  url: http://example.com/\n"
+                       "  item: css:li\n  fields:\n    title: css:a\n"),
+        "ipp.yaml": IPP_FEED,
+    })
+    r = client.post("/save", data={
+        "name": "new", "type": "html", "url": "http://example.com/x",
+        "item": "css:li", "title_sel": "css:a", "link_sel": "", "date_sel": "",
+    })
+    assert r.status_code == 302
+    raw = yaml.safe_load((d / "sites.yaml").read_text(encoding="utf-8"))
+    assert any(s["name"] == "new" for s in raw)
+
+
 # --- preview page: edit button (not delete) --------------------------------
 
 def test_preview_has_edit_button_not_delete(tmp_path):
