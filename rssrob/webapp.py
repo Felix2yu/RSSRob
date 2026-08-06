@@ -140,7 +140,7 @@ app = Flask(__name__, template_folder=str(Path(__file__).parent / "templates"),
 ADMIN_CRED_PATH = admin_credential.DEFAULT_PATH
 
 # Endpoints reachable without a session (the login/logout/first-run flow + static).
-_PUBLIC_ENDPOINTS = {"login", "logout", "setup", "static", "serve_feed"}
+_PUBLIC_ENDPOINTS = {"login", "logout", "setup", "static", "serve_feed", "health"}
 
 
 def _load_admin():
@@ -179,6 +179,12 @@ def _start_scheduler():
     t.start()
 
 _start_scheduler()
+
+
+@app.route("/health")
+def health():
+    """Liveness probe for Docker health checks (always 200 while the app runs)."""
+    return jsonify({"status": "ok"}), 200
 
 
 @app.before_request
