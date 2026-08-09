@@ -154,3 +154,85 @@ def test_scheduler_uses_per_site_proxy_fetcher(monkeypatch, tmp_path):
     sch = Scheduler(cfg, store=None, fetcher=object())
     sch._run_site(cfg.sites[0], now=0.0)
     assert seen["proxy"] == "http://127.0.0.1:9"
+
+
+# --- credential hot-refresh -------------------------------------------------
+
+def _qfile(path, cookie, token, t):
+    import json
+    import os
+    path.write_text(json.dumps({"cookie": cookie, "token": token,
+                                "updated_at": t}), encoding="utf-8")
+    os.utime(path, (t, t))
+    return path
+
+
+def test_scheduler_refreshes_wechat_client_after_credential_change(tmp_path, monkeypatch):
+    import os
+    import rssrob.scheduler as sch_mod
+    site = _wechat_site()
+    cred = _qfile(tmp_path / "wc.json", cookie="a", token="1", t=100.0)
+    monkeypatch.setattr(sch_mod, "DEFAULT_PATH", str(cred))
+    made = []
+    monkeypatch.setattr(sch_mod, "build_wechat_client", lambda: made.append(object()) or made[-1])
+
+    sched = Scheduler(_config(tmp_path, site), store=object(), fetcher=object())
+    first = sched._wechat()                 # lazy build + remember mtime
+    assert sched._wechat() is first         # unchanged credential => same client
+    assert len(made) == 1
+
+    os.utime(cred, (200.0, 200.0))          # simulate re-login rewriting the file
+    second = sched._wechat()
+    assert second is not first
+    assert len(made) == 2
+
+
+def test_credential_refresh_clears_rate_limit_backoff(tmp_path, monkeypatch):
+    import os
+    import rssrob.scheduler as sch_mod
+    from rssrob.wechat import WeChatRateLimited
+    site = _wechat_site()
+    cred = _qfile(tmp_path / "credo.json", cookie="a", token="1", t=100.0)
+    monkeypatch.setattr(sch_mod, "DEFAULT_PATH", str(cred))
+    monkeypatch.setattr(sch_mod, "build_wechat_client", lambda: object())
+
+    def boom(*a, **k):
+        raise WeChatRateLimited("freq control")
+    monkeypatch.setattr(sch_mod, "run_cycle", boom)
+
+    sched = Scheduler(_config(tmp_path, site), store=object(), fetcher=object())
+    sched._run_site(site, now=1000.0)
+    assert sched._backoff.get("oa", 0) >= 1000.0 + 1800   # pushed out
+
+    # user re-pastes the token -> scheduler loop notices the new mtime and
+    # clears the backoff so the fresh credential is used right away.
+    os.utime(cred, (200.0, 200.0))
+    sched._refresh_wechat_credential()
+    assert "oa" not in sched._backoff
+
+
+def test_scheduler_reloads_config_on_change(tmp_path, monkeypatch):
+    import os
+    import yaml
+    from rssrob.scheduler import Scheduler
+
+    cfg_path = tmp_path / "sites.yaml"
+    cfg_path.write_text(yaml.safe_dump({"sites": [{"name": "a", "type": "html",
+                                                    "url": "http://a", "item": "x",
+                                                    "fields": {"title": "t"}}]}),
+                        encoding="utf-8")
+    site = _html_site()
+    sched = Scheduler(_config(tmp_path, site), store=object(), fetcher=object(),
+                      config_path=str(cfg_path))
+    assert [s.name for s in sched.config.sites] == ["ipp"]
+
+    # a new site appears on disk -> picked up without restart
+    cfg_path.write_text(yaml.safe_dump({"sites": [
+        {"name": "a", "type": "html", "url": "http://a",
+         "item": "x", "fields": {"title": "t"}},
+        {"name": "b", "type": "html", "url": "http://b",
+         "item": "y", "fields": {"title": "u"}}]}), encoding="utf-8")
+    os.utime(cfg_path, (300.0, 300.0))
+    sched._reload_config()
+    assert [s.name for s in sched.config.sites] == ["a", "b"]
+    assert "b" in sched._next_run

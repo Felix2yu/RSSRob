@@ -4,7 +4,7 @@ import os
 import threading
 import time
 
-from .config import normalize_proxy
+from .config import load_config, normalize_proxy
 from .notify import send_notification
 from .subscribers import Subscribers
 from .fetch import Fetcher
@@ -22,6 +22,37 @@ log = logging.getLogger("rssrob.scheduler")
 _RATE_LIMIT_BACKOFF = 1800   # extra seconds to wait after mp.weixin freq control
 _AUTH_NOTIFY_COOLDOWN = 86400  # seconds between auth-expiry notifications (24 h)
 _AUTH_NOTIFY_STATE_PATH = os.path.join("var", "auth_notify_state.json")
+
+
+def _file_mtime(path):
+    """mtime of a file, or ``None`` if it doesn't exist."""
+    try:
+        return os.path.getmtime(path)
+    except OSError:
+        return None
+
+
+def _config_signature(path):
+    """Cheap change detector for a config file or directory.
+
+    A directory's own mtime only changes on entries added/removed, not on
+    content edits, so combine the newest mtime with the file count (folder mode
+    writes one file per feed, single-file mode writes one file)."""
+    if not path:
+        return None
+    if os.path.isdir(path):
+        mtimes = []
+        for base, _dirs, files in os.walk(path):
+            for fn in files:
+                if fn.endswith((".yaml", ".yml")):
+                    mtimes.append(os.path.getmtime(os.path.join(base, fn)))
+        if not mtimes:
+            return None
+        return (len(mtimes), max(mtimes))
+    try:
+        return (1, os.path.getmtime(path))
+    except OSError:
+        return None
 
 
 class _AuthNotifyTracker:
@@ -118,16 +149,20 @@ def _notify_auth_error(service, error):
 
 
 class Scheduler:
-    def __init__(self, config, store, fetcher):
+    def __init__(self, config, store, fetcher, config_path=None):
         self.config = config
         self.store = store
         self.fetcher = fetcher
+        self.config_path = config_path             # none -> no config hot-reload
+        self._config_sig = _config_signature(config_path)
         self._stop = threading.Event()
         self._thread = None
         self._next_run = {site.name: 0.0 for site in config.sites}
         self._backoff = {}                 # site name -> earliest next-due time
         self._wechat_client = None         # built lazily, shared across wechat feeds
         self._twitter_client = None        # built lazily, shared across twitter feeds
+        self._wechat_cred_mtime = None
+        self._twitter_cred_mtime = None
         self._proxy_fetchers = {}          # proxy url -> Fetcher (per-site proxy)
 
     def start(self) -> None:
@@ -139,14 +174,70 @@ class Scheduler:
         if self._thread:
             self._thread.join(timeout=5)
 
+    def _reload_config(self) -> None:
+        """Pick up feeds added/edited via the management UI without a restart."""
+        if not self.config_path:
+            return
+        sig = _config_signature(self.config_path)
+        if sig is None or sig == self._config_sig:
+            return
+        self._config_sig = sig
+        try:
+            cfg = load_config(self.config_path)
+        except Exception as e:            # keep the previous, still valid config
+            log.warning("config reload skipped (invalid): %s", e)
+            return
+        old_names = {s.name for s in self.config.sites}
+        self.config = cfg
+        for site in cfg.sites:
+            self._next_run.setdefault(site.name, 0.0)
+        for name in old_names - {s.name for s in cfg.sites}:
+            self._next_run.pop(name, None)
+            self._backoff.pop(name, None)
+        log.info("reloaded config: %d feed(s)", len(cfg.sites))
+
+    def _clear_backoff(self, stype) -> None:
+        """Drop the rate-limit backoff for every feed of service type ``stype``."""
+        for site in self.config.sites:
+            if site.type == stype:
+                self._backoff.pop(site.name, None)
+
+    def _refresh_wechat_credential(self) -> None:
+        """Rebuild the 公众号 client when the persisted credential changed.
+
+        The web UI (and CLI login) writes a new cookie+token to disk; without
+        this the scheduler would keep using the stale session forever — every
+        request fails as invalid and can push the IP/account into frequency
+        control, which is why a fresh token still doesn't help until a restart."""
+        mtime = _file_mtime(DEFAULT_PATH)
+        if mtime == self._wechat_cred_mtime:
+            return
+        self._wechat_cred_mtime = mtime
+        self._wechat_client = build_wechat_client()
+        self._clear_backoff("wechat")
+        log.info("公众号凭证已更新 —— 已重建客户端并清除频控退避")
+
+    def _refresh_twitter_credential(self) -> None:
+        mtime = _file_mtime(TWITTER_CRED_PATH)
+        if mtime == self._twitter_cred_mtime:
+            return
+        self._twitter_cred_mtime = mtime
+        self._twitter_client = build_twitter_client()
+        self._clear_backoff("twitter")
+        log.info("X 凭证已更新 — 已重建客户端并清除频控退避")
+
     def _wechat(self) -> WeChatClient:
+        self._refresh_wechat_credential()
         if self._wechat_client is None:
             self._wechat_client = build_wechat_client()
+            self._wechat_cred_mtime = _file_mtime(DEFAULT_PATH)
         return self._wechat_client
 
     def _twitter(self) -> TwitterClient:
+        self._refresh_twitter_credential()
         if self._twitter_client is None:
             self._twitter_client = build_twitter_client()
+            self._twitter_cred_mtime = _file_mtime(TWITTER_CRED_PATH)
         return self._twitter_client
 
     def _fetcher_for(self, site):
@@ -160,6 +251,12 @@ class Scheduler:
     def _loop(self) -> None:
         while not self._stop.is_set():
             now = time.time()
+            # pick up credentials & feeds updated in the web UI without a restart;
+            # credential refresh also clears backoff so an updated token is used
+            # right away instead of waiting out the frequency-control penalty.
+            self._reload_config()
+            self._refresh_wechat_credential()
+            self._refresh_twitter_credential()
             for site in self.config.sites:
                 if self._stop.is_set():
                     break
@@ -188,7 +285,14 @@ class Scheduler:
                         site.name, e)
             _notify_auth_error("X/Twitter", e)
         except (WeChatRateLimited, TwitterRateLimited) as e:
-            self._backoff[site.name] = now + max(site.interval, _RATE_LIMIT_BACKOFF)
-            log.warning("rate-limited %s: %s — backing off", site.name, e)
+            # mp.weixin.qq.com (and X) rate-limit per session/IP, not per feed —
+            # back off every feed of the same service so the next feed won't
+            # immediately trip frequency control again.
+            stype = "wechat" if isinstance(e, WeChatRateLimited) else "twitter"
+            for s in self.config.sites:
+                if s.type == stype:
+                    self._backoff[s.name] = now + max(s.interval, _RATE_LIMIT_BACKOFF)
+            log.warning("rate-limited %s (%s): %s — backing off all %s feeds",
+                        site.name, stype, e, stype)
         except Exception as e:  # per-site isolation: never crash the loop
             log.warning("error scraping %s: %s", site.name, e)

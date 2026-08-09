@@ -110,14 +110,14 @@ def main(argv=None) -> int:
         return 2
 
     if args.command == "serve":
-        return _serve(config)
+        return _serve(config, config_path=args.config)
     return _run_once(config, args.site, args.write)
 
 
-def _serve(config) -> int:
+def _serve(config, config_path=None) -> int:
     store = Store(config.state_db)
     fetcher = Fetcher()
-    scheduler = Scheduler(config, store, fetcher)
+    scheduler = Scheduler(config, store, fetcher, config_path=config_path)
     scheduler.start()
     server = make_server(config.output_dir, config.http.host, config.http.port)
     print(f"serving on http://{config.http.host}:{config.http.port}/")

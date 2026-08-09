@@ -172,7 +172,8 @@ def _start_scheduler():
     def _run():
         try:
             _cfg = load_config(_config_path())
-            Scheduler(_cfg, Store(_cfg.state_db), Fetcher()).start()
+            Scheduler(_cfg, Store(_cfg.state_db), Fetcher(),
+                      config_path=_config_path()).start()
         except Exception as exc:
             print(f"background scraper disabled: {exc}", file=sys.stderr)
     t = threading.Thread(target=_run, daemon=True)
