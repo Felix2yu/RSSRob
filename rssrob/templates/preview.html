@@ -10,6 +10,8 @@
           <span class="badge live">● 实时</span>
         {% elif source == "saved" %}
           <span class="badge saved">● 本地缓存</span>
+        {% elif source == "cached" %}
+          <span class="badge saved">● 缓存副本</span>
         {% endif %}
       </h1>
     </div>
@@ -27,6 +29,11 @@
   {% if source == "saved" %}
     <div class="notice">
       实时抓取失败，显示本地缓存副本。<br>
+      <code>{{ fetch_error }}</code>
+    </div>
+  {% elif source == "cached" %}
+    <div class="notice">
+      微信/X 接口暂时不可用（频率限制或会话过期），显示最近一次抓取的内容；稍后重试即可。<br>
       <code>{{ fetch_error }}</code>
     </div>
   {% endif %}

@@ -54,12 +54,12 @@ from rssrob.scheduler import Scheduler, build_twitter_client, build_wechat_clien
 from rssrob.store import Store
 from rssrob.subscribers import Subscribers
 from rssrob.notification_targets import NotificationTargets
-from rssrob.twitter import X_LOGIN_URL, TwitterAuthError
+from rssrob.twitter import X_LOGIN_URL, TwitterAuthError, TwitterRateLimited
 from rssrob.twitter_credential import DEFAULT_PATH as TWITTER_CRED_PATH
 from rssrob.twitter_credential import credential_from_cookie
 from rssrob.twitter_credential import load as load_twitter_credential
 from rssrob.twitter_credential import save as save_twitter_credential
-from rssrob.wechat import MP_LOGIN_URL, WeChatAuthError
+from rssrob.wechat import MP_LOGIN_URL, WeChatAuthError, WeChatRateLimited
 from rssrob.wechat_credential import DEFAULT_PATH as WECHAT_CRED_PATH
 from rssrob.wechat_credential import credential_from_login
 from rssrob.wechat_credential import load as load_credential
@@ -391,6 +391,35 @@ class FallbackFetcher:
             raise
 
 
+def _cached_feed(config, site):
+    """Last stored items for a wechat/X feed, or ``None`` if none exist.
+
+    Used to keep the feed page usable while the platform API is rate-limited
+    (freq control) or the session is stale — the page shows cached content
+    plus a banner instead of an all-or-nothing error screen."""
+    if site.type not in ("wechat", "twitter"):
+        return None
+    try:
+        from datetime import datetime, timezone
+
+        from rssrob.models import Item
+
+        store = Store(config.state_db)
+        rows = store.recent(site.name, site.max_items)
+        if not rows:
+            return None
+        items = []
+        for r in rows:
+            date = (datetime.fromtimestamp(r.published, tz=timezone.utc).isoformat()
+                    if r.published is not None else None)
+            items.append(Item(id=r.id, title=r.title, link=r.link,
+                              summary=r.summary, date=date))
+        title = site.account_name or site.title or site.name
+        return items, title, None
+    except Exception:
+        return None
+
+
 @app.route("/")
 def index():
     try:
@@ -410,26 +439,29 @@ def index():
     # wechat/twitter feeds are fetched via their API clients, not an HTTP fetch.
     wechat_client = _wechat_client() if site.type == "wechat" else None
     twitter_client = _twitter_client() if site.type == "twitter" else None
+    fallback_error = None
     try:
         items, feed_title, feed_desc = obtain_items(
             site, fetcher, wechat_client=wechat_client,
             twitter_client=twitter_client)
-    except WeChatAuthError:
-        return render_template(
-            "error.html",
-            message="not logged in to mp.weixin.qq.com — open the "
-                    "“wechat 订阅号” page and paste your cookie + token first.",
-            sites=config.sites,
-            active=site.name,
-        ), 502
-    except TwitterAuthError:
-        return render_template(
-            "error.html",
-            message="not logged in to X — open the “twitter” page and "
-                    "paste your cookie first.",
-            sites=config.sites,
-            active=site.name,
-        ), 502
+    except (WeChatAuthError, WeChatRateLimited,
+            TwitterAuthError, TwitterRateLimited) as e:
+        # Platform API down or stale session: fall back to the cached feed so
+        # the page stays usable instead of an all-or-nothing error screen.
+        cached = _cached_feed(config, site)
+        if cached is None:
+            if site.type == "wechat":
+                hint = ("微信公众号接口暂不可用：" + str(e) +
+                        "。若是登录过期，请在“wechat 订阅号”页重新粘贴 "
+                        "cookie+token；若是频率限制（freq control），请稍候"
+                        "几分钟再试。")
+            else:
+                hint = f"X 接口暂时不可用：{e}"
+            return render_template(
+                "error.html", message=hint,
+                sites=config.sites, active=site.name), 502
+        items, feed_title, feed_desc = cached
+        fallback_error = f"接口暂时不可用（{e}）—— 以下展示最近一次抓取的缓存。"
     except Exception as e:
         if site.type == "twitter":
             src = f"@{site.username}"
@@ -444,6 +476,8 @@ def index():
 
     # remember how the page itself was loaded (shown as a live/saved badge)
     main_source, main_error = fetcher.source, fetcher.error
+    if fallback_error:
+        main_source, main_error = "cached", fallback_error
 
     # Render at once from the data we already have: the raw title plus the RSS
     # summary (no network). Html items have no summary — their full title and
