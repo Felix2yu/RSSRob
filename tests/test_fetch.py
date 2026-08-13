@@ -120,7 +120,8 @@ def test_fetch_in_browserless_falls_back_to_v1_function_key():
     assert out == {"n": 1}
     assert list(calls[0][1]) == ["code"]           # v2 first
     assert list(calls[1][1]) == ["function"]       # v1 fallback on 4xx
-    assert calls[1][1]["function"] == calls[0][1]["code"]
+    assert calls[1][1]["function"].replace("module.exports = ", "") \
+        == calls[0][1]["code"].replace("export default ", "")   # same body
 
 
 def test_content_falls_back_to_v1_string_user_agent():
@@ -143,3 +144,22 @@ def test_content_falls_back_to_v1_string_user_agent():
     assert out == b"<html>v1</html>"
     assert calls[0]["userAgent"] == {"userAgent": "UA"}   # v2 object form
     assert calls[1]["userAgent"] == "UA"                  # v1 string fallback
+
+
+def test_function_code_uses_esm_export_default():
+    """v2 /function runs the script as an ES module — must be prefixed with
+    `export default` (v1 needs `module.exports`)."""
+    class Ok:
+        ok = True
+        status_code = 200
+        def json(self):
+            return {"__ok": True, "data": {"ok": 1}}
+
+    calls = []
+    def fake_post(url, json=None, timeout=None):
+        calls.append(json)
+        return Ok()
+
+    with patch("rssrob.fetch.requests.post", side_effect=fake_post):
+        fetch_in_browserless("http://bl:3000", "http://p/", {"url": "http://a/"})
+    assert calls[0]["code"].startswith("export default")               # v2 ESM

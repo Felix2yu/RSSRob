@@ -46,26 +46,27 @@ def fetch_in_browserless(browserless_url, page_url, api, timeout: int = 30):
         "method": api.get("method") or "GET",
         "headers": api.get("headers") or {},
     }
-    code = f"""
-    async ({{ page }}) => {{
-      const cfg = {json.dumps(cfg)};
-      await page.goto(cfg.pageUrl, {{ waitUntil: 'domcontentloaded' }});
+    code = """
+    async ({ page }) => {
+      const cfg = %s;
+      await page.goto(cfg.pageUrl, { waitUntil: 'domcontentloaded' });
       await page.waitForTimeout(cfg.waitMs);
-      return await page.evaluate(async (c) => {{
-        const res = await fetch(c.url, {{
+      return await page.evaluate(async (c) => {
+        const res = await fetch(c.url, {
           method: c.method || 'GET',
-          headers: c.headers || {{}},
+          headers: c.headers || {},
           credentials: 'include',
-        }});
+        });
         const text = await res.text();
-        try {{ return {{ __ok: true, data: JSON.parse(text) }}; }}
-        catch (e) {{ return {{ __ok: false, data: text }}; }}
-      }}, cfg);
-    }}
-    """
+        try { return { __ok: true, data: JSON.parse(text) }; }
+        catch (e) { return { __ok: false, data: text }; }
+      }, cfg);
+    }
+    """ % json.dumps(cfg)
+    # v2 runs the function in-browser as an ES module; v1 wants CommonJS.
     resp = _post_browserless(f"{normalize_browserless(browserless_url)}/function",
-                             {"code": code},      # v2
-                             {"function": code},  # v1
+                             {"code": "export default " + code},   # v2 (ESM)
+                             {"function": "module.exports = " + code},  # v1
                              timeout + 10)
     if not resp.ok:
         _raise_browserless_error(resp)
