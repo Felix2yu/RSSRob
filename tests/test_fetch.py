@@ -19,6 +19,7 @@ def test_fetcher_returns_content_and_sets_headers():
 
 def test_fetcher_renders_via_browserless_content_api():
     class Resp:
+        ok = True
         content = b"<html>rendered</html>"
         def raise_for_status(self):
             pass
@@ -52,6 +53,7 @@ def test_fetcher_browserless_falls_back_to_env_var(monkeypatch):
 
 def test_fetch_in_browserless_posts_function_and_returns_json():
     class Resp:
+        ok = True
         def raise_for_status(self):
             pass
         def json(self):
@@ -75,6 +77,7 @@ def test_fetch_in_browserless_posts_function_and_returns_json():
 
 def test_fetch_in_browserless_raises_on_non_json():
     class Resp:
+        ok = True
         def raise_for_status(self):
             pass
         def json(self):

@@ -44,7 +44,7 @@ from rssrob.article import fetch_article
 from rssrob.backup import build_backup, restore_backup
 from rssrob.config import (ConfigError, load_config, normalize_browserless,
                            normalize_proxy)
-from rssrob.fetch import fetch_in_browserless
+from rssrob.fetch import _raise_browserless_error, fetch_in_browserless
 from rssrob.digest import SentStore, send_subscriber_digest
 from rssrob.filters import apply_filter, parse_terms
 from rssrob.extract import extract_items
@@ -402,7 +402,8 @@ class FallbackFetcher:
                 resp = requests.get(url, timeout=timeout,
                                     headers={"User-Agent": user_agent},
                                     proxies=proxies)
-            resp.raise_for_status()
+            if not resp.ok:
+                _raise_browserless_error(resp) if self.browserless else resp.raise_for_status()
             self.source = "live"
             return resp.content
         except Exception as e:

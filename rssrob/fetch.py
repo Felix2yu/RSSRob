@@ -6,6 +6,16 @@ import requests
 from .config import normalize_browserless
 
 
+def _raise_browserless_error(resp):
+    """Turn a non-2xx browserless response into an error that carries the
+    service's own error body (browserless 500s usually explain the cause)."""
+    try:
+        detail = resp.text[:500]
+    except Exception:
+        detail = ""
+    raise RuntimeError(f"browserless HTTP {resp.status_code}: {detail}")
+
+
 def fetch_in_browserless(browserless_url, page_url, api, timeout: int = 30):
     """Render ``page_url`` in a headless browser and fetch an API *inside the
     page context*, returning the parsed JSON.
@@ -42,7 +52,8 @@ def fetch_in_browserless(browserless_url, page_url, api, timeout: int = 30):
     """
     resp = requests.post(f"{normalize_browserless(browserless_url)}/function",
                          json={"code": code}, timeout=timeout + 10)
-    resp.raise_for_status()
+    if not resp.ok:
+        _raise_browserless_error(resp)
     out = resp.json()
     if not out.get("__ok"):
         raise RuntimeError(
@@ -91,7 +102,8 @@ class Fetcher:
         }
         resp = requests.post(f"{self.browserless}/content", json=body,
                              timeout=timeout + 10)
-        resp.raise_for_status()
+        if not resp.ok:
+            _raise_browserless_error(resp)
         return resp.content
 
     def fetch_page_api(self, page_url: str, api: dict, timeout: int = 30):
