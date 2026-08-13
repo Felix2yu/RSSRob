@@ -380,3 +380,12 @@ def test_obtain_items_pageapi_retries_on_exception():
     items, _, _ = obtain_items(site, FakeFetcher())
     assert len(calls) == 2
     assert len(items) == 1
+
+
+def test_run_cycle_pageapi_category_renders_in_feed(tmp_path):
+    from rssrob.feed import build_feed
+    from rssrob.models import Item
+    site = Site(name="p", url="http://p/", type="pageapi",
+                api={"url": "http://a/"}, item="$.a", fields={"title": "$.t"})
+    xml = build_feed(site, [Item(id="1", title="X", category="音乐会")]).decode()
+    assert "<category>音乐会</category>" in xml

@@ -27,7 +27,7 @@ def build_feed(site: Site, items) -> bytes:
         if it.link:
             fe.link(href=it.link)
         if it.category:
-            fe.category(it.category)
+            fe.category(term=it.category)   # feedgen needs a dict, not a raw string
         if it.summary:
             fe.description(it.summary)
         ts = it.published if it.published is not None else it.first_seen
