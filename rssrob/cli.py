@@ -167,7 +167,8 @@ def _run_once(config, site_name, write) -> int:
         print(f"no such site: {site_name}", file=sys.stderr)
         return 2
 
-    fetcher = Fetcher(proxy=site.proxy) if site.proxy else Fetcher()
+    fetcher = (Fetcher(proxy=site.proxy, browserless=site.browserless)
+               if (site.proxy or site.browserless) else Fetcher())
     wechat_client = build_wechat_client() if site.type == "wechat" else None
     twitter_client = build_twitter_client() if site.type == "twitter" else None
     if write:

@@ -8,3 +8,23 @@ defaults:
   max_items: 50
   timeout: 20
   user_agent: "RSSRob/0.1"
+  # browserless: http://localhost:3000   # render JS-challenge pages via a headless-browser service
+  # (also set globally via the RSSROB_BROWSERLESS env var, e.g. in Docker)
+
+# Page-internal API feeds (WAF/JS-challenge sites): the data API is fetched
+# from inside a rendered page so the browser's runtime signature headers are
+# attached automatically. Example:
+# - name: szwtfz-shows
+#   type: pageapi
+#   url: https://szwtfz.maitix.com/h5/
+#   browserless: http://localhost:3000
+#   api:
+#     url: https://client.maitix.com/api/pro/projects?pageSize=100&page=1
+#     headers: {Origin: "https://szwtfz.maitix.com"}
+#     wait: 6000                      # ms for the WAF SDK to initialize
+#   item: "$.data.dataList"
+#   fields:
+#     title: "$.projectName"
+#     link: "https://szwtfz.maitix.com/h5/#/pages-order/projectDetail/index?projectId={$.projectToken}"
+#     date: "$.startTime"
+#     category: "$.projectTypeName"

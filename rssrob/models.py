@@ -4,12 +4,13 @@ from typing import Optional
 
 @dataclass
 class Item:
-    """Raw item produced by extraction (html) or feed parsing (rss)."""
+    """Raw item produced by extraction (html/json) or feed parsing (rss)."""
     id: str
     title: Optional[str] = None
     link: Optional[str] = None
     summary: Optional[str] = None
     date: Optional[str] = None  # raw date string from source; parsed in the store
+    category: Optional[str] = None
 
 
 @dataclass
@@ -21,3 +22,4 @@ class StoredItem:
     summary: Optional[str]
     published: Optional[float]  # epoch seconds, or None
     first_seen: float
+    category: Optional[str] = None

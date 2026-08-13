@@ -318,3 +318,44 @@ def test_enrich_paces_between_detail_fetches(tmp_path, monkeypatch):
     assert fetcher.requested.count("http://example.com/a1") == 1
     assert fetcher.requested.count("http://example.com/a2") == 1
     assert len(sleeps) == 1                      # one gap between the two fetches
+
+
+def test_obtain_items_pageapi_fetches_in_page_and_retries_on_empty():
+    site = Site(
+        name="szwtfz", url="https://szwtfz.maitix.com/h5/", type="pageapi",
+        api={"url": "https://client.maitix.com/api/pro/projects"},
+        item="$.data.dataList",
+        fields={"title": "$.projectName",
+                "link": "https://szwtfz.maitix.com/h5/#/pages-order/projectDetail/index?projectId={$.projectToken}"},
+    )
+    calls = []
+
+    class FakeFetcher:
+        browserless = "http://bl:3000"
+        def fetch_page_api(self, page_url, api, timeout=20):
+            calls.append(api)
+            if len(calls) == 1:                    # first call: stale session
+                return {"data": {"dataList": []}}
+            return {"data": {"dataList": [
+                {"projectToken": "A1", "projectName": "话剧《茶馆》"}]}}
+
+    items, title, desc = obtain_items(site, FakeFetcher())
+    assert len(calls) == 2                         # empty -> one reload + retry
+    assert len(items) == 1
+    assert items[0].title == "话剧《茶馆》"
+    assert items[0].id.endswith("projectId=A1")
+    assert title is None and desc is None
+
+
+def test_obtain_items_pageapi_requires_browserless():
+    site = Site(name="x", url="http://p/", type="pageapi",
+                api={"url": "http://a/"}, item="$.a", fields={"title": "$.b"})
+
+    class NoBrowserFetcher:
+        browserless = None
+        def fetch_page_api(self, *a, **k):
+            raise RuntimeError("pageapi feed needs a browserless service")
+
+    import pytest
+    with pytest.raises(RuntimeError):
+        obtain_items(site, NoBrowserFetcher())

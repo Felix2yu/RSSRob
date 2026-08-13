@@ -167,6 +167,24 @@ def test_per_feed_proxy(tmp_path):
     assert by["inherits"].proxy == "http://127.0.0.1:8080"     # inherits defaults.proxy
 
 
+BROWSERLESS_CFG = """
+defaults:
+  browserless: localhost:3000
+sites:
+  - {name: inherits, url: 'http://a/', type: rss}
+  - {name: explicit, url: 'http://b/', type: rss, browserless: 'http://bl:8080/'}
+  - {name: none, url: 'http://c/', type: rss, browserless: ''}
+"""
+
+
+def test_per_feed_browserless(tmp_path):
+    cfg = load_config(_write(tmp_path, BROWSERLESS_CFG))
+    by = {s.name: s for s in cfg.sites}
+    assert by["inherits"].browserless == "http://localhost:3000"  # inherits + scheme added
+    assert by["explicit"].browserless == "http://bl:8080"         # trailing slash stripped
+    assert by["none"].browserless is None                         # empty -> off
+
+
 def test_twitter_site_requires_username():
     from rssrob.config import _build_config
     with pytest.raises(ConfigError):
@@ -226,3 +244,47 @@ def test_negative_max_age_days_clamped_to_zero(tmp_path):
     cfg = load_config(_write(tmp_path,
         "sites:\n  - {name: f, type: rss, url: 'http://a/', max_age_days: -1}\n"))
     assert cfg.sites[0].max_age_days == 0   # negative clamped -> keep forever (no prune)
+
+
+PAGEAPI_CFG = """
+sites:
+  - name: szwtfz
+    type: pageapi
+    url: https://szwtfz.maitix.com/h5/
+    browserless: http://browserless:3000
+    api:
+      url: https://client.maitix.com/api/pro/projects
+      headers: {Origin: "https://szwtfz.maitix.com"}
+      wait: 6000
+    item: "$.data.dataList"
+    fields:
+      title: "$.projectName"
+      link: "https://szwtfz.maitix.com/h5/#/pages-order/projectDetail/index?projectId={$.projectToken}"
+      date: "$.startTime"
+      category: "$.projectTypeName"
+"""
+
+
+def test_pageapi_site_parses(tmp_path):
+    cfg = load_config(_write(tmp_path, PAGEAPI_CFG))
+    s = cfg.sites[0]
+    assert s.type == "pageapi"
+    assert s.browserless == "http://browserless:3000"
+    assert s.api == {"url": "https://client.maitix.com/api/pro/projects",
+                     "headers": {"Origin": "https://szwtfz.maitix.com"}, "wait": 6000}
+    assert s.fields["link"].startswith("https://")   # template kept as-is
+
+
+def test_pageapi_missing_api_url_raises(tmp_path):
+    bad = ("sites:\n  - {name: x, type: pageapi, url: 'http://p/', item: '$.a',\n"
+           "     fields: {title: '$.b'}}\n")
+    with pytest.raises(ConfigError):
+        load_config(_write(tmp_path, bad))
+
+
+def test_pageapi_bad_json_path_raises(tmp_path):
+    bad = ("sites:\n  - name: x\n    type: pageapi\n    url: http://p/\n"
+           "    api: {url: http://a/}\n    item: dataList\n"
+           "    fields: {title: '$.b'}\n")
+    with pytest.raises(ConfigError):
+        load_config(_write(tmp_path, bad))

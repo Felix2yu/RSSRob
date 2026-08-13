@@ -241,12 +241,14 @@ class Scheduler:
         return self._twitter_client
 
     def _fetcher_for(self, site):
-        """The shared fetcher, or a per-site proxied one when site.proxy is set."""
-        if not site.proxy:
+        """The shared fetcher, or a per-site proxied/browserless one."""
+        key = (site.proxy, site.browserless)
+        if not any(key):
             return self.fetcher
-        if site.proxy not in self._proxy_fetchers:
-            self._proxy_fetchers[site.proxy] = Fetcher(proxy=site.proxy)
-        return self._proxy_fetchers[site.proxy]
+        if key not in self._proxy_fetchers:
+            self._proxy_fetchers[key] = Fetcher(proxy=site.proxy,
+                                                browserless=site.browserless)
+        return self._proxy_fetchers[key]
 
     def _loop(self) -> None:
         while not self._stop.is_set():

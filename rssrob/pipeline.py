@@ -38,6 +38,15 @@ def obtain_items(site: Site, fetcher,
         raw = twitter_client.list_tweets(user_id, site.max_items)
         title = site.account_name or f"@{site.username}"
         return twitter_client.to_items(raw), title, None
+    if site.type == "pageapi":
+        # The API must be fetched from inside the rendered page so the WAF's
+        # runtime-generated signature headers are attached automatically.
+        doc = fetcher.fetch_page_api(site.url, site.api, timeout=site.timeout)
+        items = extract.extract_json_items(doc, site.item, site.fields)
+        if not items:     # WAF session may have expired — one reload + retry
+            doc = fetcher.fetch_page_api(site.url, site.api, timeout=site.timeout)
+            items = extract.extract_json_items(doc, site.item, site.fields)
+        return items, None, None
     content = fetcher.get(site.url, site.timeout, site.user_agent)
     if site.type == "rss":
         parsed = rss.parse_feed(content, site.url)

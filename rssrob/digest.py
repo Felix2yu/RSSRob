@@ -232,7 +232,8 @@ def send_feed_digest(site, recipients: List[str], limit: int = 10,
                      state=None, only_new: bool = True) -> dict:
     """Fetch a feed, follow links for full titles + short descriptions, and
     send a notification to all recipients."""
-    fetcher = fetcher or Fetcher(proxy=getattr(site, "proxy", None))
+    fetcher = fetcher or Fetcher(proxy=getattr(site, "proxy", None),
+                                 browserless=getattr(site, "browserless", None))
     items, feed_title, _ = obtain_items(site, fetcher)
     first_send = state is not None and not state.seen_ids(site.name)
     if only_new and state is not None:
@@ -278,7 +279,8 @@ def send_subscriber_digest(subscriber, sites, *, limit: int = 10,
     to_mark = []
     errors = []
     for site in sites:
-        f = fetcher or Fetcher(proxy=getattr(site, "proxy", None))
+        f = fetcher or Fetcher(proxy=getattr(site, "proxy", None),
+                               browserless=getattr(site, "browserless", None))
         try:
             items, feed_title, _ = obtain_items(site, f)
             seen = state.seen_ids(site.name, subscriber) if state is not None else set()

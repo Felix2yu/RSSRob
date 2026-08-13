@@ -84,6 +84,18 @@ docker compose logs -f    # 查看启动日志
 
 访问 `http://localhost:5000` 打开 Web 管理界面。
 
+### Docker 环境变量
+
+| 变量 | 说明 |
+|------|------|
+| `RSSROB_BROWSERLESS` | 全局无头浏览器服务地址（如 `http://browserless:3000`）。设置后所有页面经真实浏览器渲染再抓取，用于带 WAF/JS 防护的站点；可在 `docker-compose.yml` 的 `environment` 或 `.env` 文件中配置，也可在站点配置里用 `browserless:` 按站点覆盖 |
+| `RSSROB_PROXY` | 全局出站代理（可选） |
+
+```bash
+# .env 中设置后，docker compose up -d 自动生效
+RSSROB_BROWSERLESS=http://browserless:3000
+```
+
 ---
 
 ## 快速开始
@@ -146,14 +158,46 @@ configs/
 | 键 | 必填 | 说明 |
 |-----|------|------|
 | `name` | 是 | 唯一标识，用作文件名和 CLI 参数 |
-| `url` | 是 | 页面 URL（html）或订阅源 URL（rss） |
-| `type` | 否 | `html`（默认）、`rss`、`wechat`、`twitter` |
+| `url` | 是 | 页面 URL（html）或订阅源 URL（rss）或需加载的页面（pageapi） |
+| `type` | 否 | `html`（默认）、`rss`、`wechat`、`twitter`、`pageapi` |
 | `description` | 否 | 显示名称，用于 RSS 标题和 UI 展示 |
-| `item` | html 必填 | 条目选择器 |
-| `fields` | html 必填 | 字段 → 选择器映射 |
+| `item` | html/pageapi 必填 | 条目选择器（html 用 CSS/XPath；pageapi 用 JSON 路径如 `$.data.dataList`） |
+| `fields` | html/pageapi 必填 | 字段 → 选择器映射 |
 | `interval` | 否 | 覆盖默认抓取间隔 |
 | `proxy` | 否 | 每订阅源代理 |
+| `browserless` | 否 | browserless 无头浏览器服务地址（如 `http://localhost:3000`）；设置后页面经真实浏览器渲染再抓取，用于带 WAF/JS 防护（需要浏览器生成 token/cookie）的站点 |
+| `api` | pageapi 必填 | 数据 API 配置（见下） |
 | `filter` | 否 | 关键词/正则包含–排除过滤 |
+
+### 页面内 API 订阅（pageapi）
+
+适用于数据藏在 API 接口后面、且接口带 WAF/JS 风控（如阿里霸下）的站点：
+纯服务端请求会被拒（无签名头），必须由真实浏览器加载页面、等风控 SDK 初始化后，
+**在页面上下文内**请求 API（签名头自动带上）。RSSRob 通过 browserless 的
+`/function` 接口完成这一过程，返回 JSON 后用 JSON 路径提取条目：
+
+```yaml
+- name: szwtfz-shows
+  type: pageapi
+  description: 苏州文体通
+  url: https://szwtfz.maitix.com/h5/        # 浏览器加载的页面（等霸下初始化）
+  browserless: http://browserless:3000      # 或全局 RSSROB_BROWSERLESS
+  api:
+    url: https://client.maitix.com/api/pro/projects?pageSize=100&page=1
+    headers: { Origin: "https://szwtfz.maitix.com" }   # 可选，必备时设置
+    wait: 6000                               # 等风控 SDK 初始化（毫秒，默认 5000）
+  item: "$.data.dataList"                    # JSON 路径：条目列表
+  fields:
+    title: "$.projectName"                   # JSON 路径（相对条目）
+    link: "https://szwtfz.maitix.com/h5/#/pages-order/projectDetail/index?projectId={$.projectToken}"
+    date: "$.startTime"                      # 模板用 {$.字段} 插值
+    category: "$.projectTypeName"
+```
+
+- JSON 路径支持 `$.a.b[0].c` 子集（点分段 + 数组下标）
+- `link`/`summary` 等字段可写模板，`{$.xxx}` 会替换为条目的字段值
+- 结果为空时自动重载页面重试一次（风控会话过期续命）
+- 每次抓取都是全新浏览器页面（含初始化等待），建议间隔 ≥ 30 分钟
 
 ### 选择器语法
 

@@ -80,15 +80,49 @@
         {{ 'checked' if ptype == 'html' else '' }}> HTML 页面</label>
       <label class="inline"><input type="radio" name="type" value="rss"
         {{ 'checked' if ptype == 'rss' else '' }}> RSS / Atom</label>
+      <label class="inline"><input type="radio" name="type" value="pageapi"
+        {{ 'checked' if ptype == 'pageapi' else '' }}> 页面内 API (pageapi)</label>
       <label class="inline"><input type="radio" name="type" value="wechat"
         {{ 'checked' if ptype == 'wechat' else '' }}> 微信公众号</label>
       <label class="inline"><input type="radio" name="type" value="twitter"
         {{ 'checked' if ptype == 'twitter' else '' }}> Twitter / X</label>
     </div>
 
-    <div class="for-url"{% if ptype not in ('html', 'rss') %} style="display:none"{% endif %}>
+    <div class="for-url"{% if ptype not in ('html', 'rss', 'pageapi') %} style="display:none"{% endif %}>
       <label>页面 / 订阅源 URL</label>
       <input type="text" name="url" value="{{ form.url }}">
+    </div>
+
+    <div class="for-pageapi"{% if ptype != 'pageapi' %} style="display:none"{% endif %}>
+      <p class="count" style="margin:.4rem 0;">数据在无头浏览器（browserless）加载页面、等
+        WAF/JS 防护初始化后，从页面上下文内请求 API（签名头自动带上）。需要先配置
+        browserless 服务（下方或 <code>RSSROB_BROWSERLESS</code>）。</p>
+      <label>条目路径（JSON path，如 $.data.dataList）</label>
+      <input type="text" name="item" value="{{ form.item }}"
+             placeholder="$.data.dataList">
+
+      <div class="row">
+        <div><label>标题</label><input type="text" name="title_sel" value="{{ form.title_sel }}"
+             placeholder="$.projectName"></div>
+        <div><label>链接（路径或 {$.x} 模板）</label><input type="text" name="link_sel" value="{{ form.link_sel }}"
+             placeholder="https://…/?id={$.projectToken}"></div>
+      </div>
+      <div class="row">
+        <div><label>日期</label><input type="text" name="date_sel" value="{{ form.date_sel }}"
+             placeholder="$.startTime"></div>
+        <div><label>分类</label><input type="text" name="category_sel" value="{{ form.category_sel }}"
+             placeholder="$.projectTypeName"></div>
+      </div>
+
+      <label>API URL（在页面内 fetch 的数据接口）</label>
+      <input type="text" name="api_url" value="{{ form.api_url }}"
+             placeholder="https://client.maitix.com/api/pro/projects?pageSize=100&page=1">
+      <div class="row">
+        <div><label>等待 WAF 初始化（毫秒，默认 5000）</label><input type="text" name="api_wait" value="{{ form.api_wait }}"
+             placeholder="6000"></div>
+        <div><label>额外请求头（JSON，可选）</label><input type="text" name="api_headers" value="{{ form.api_headers }}"
+             placeholder='{"Origin": "https://szwtfz.maitix.com"}'></div>
+      </div>
     </div>
 
     <div class="for-html"{% if ptype != 'html' %} style="display:none"{% endif %}>
@@ -123,6 +157,10 @@
     <label>代理（可选 — 用于防火墙后的订阅源）</label>
     <input type="text" name="proxy" value="{{ form.proxy }}"
            placeholder="socks5://127.0.0.1:1080  or  http://127.0.0.1:7890">
+
+    <label>无头浏览器（可选 — 通过 browserless 服务渲染 JS 后抓取，用于有 WAF/JS 防护的站点）</label>
+    <input type="text" name="browserless" value="{{ form.browserless }}"
+           placeholder="http://localhost:3000">
 
     <div class="filters">
       <div class="row">

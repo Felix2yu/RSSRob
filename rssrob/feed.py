@@ -26,6 +26,8 @@ def build_feed(site: Site, items) -> bytes:
         fe.title(it.title or "(untitled)")
         if it.link:
             fe.link(href=it.link)
+        if it.category:
+            fe.category(it.category)
         if it.summary:
             fe.description(it.summary)
         ts = it.published if it.published is not None else it.first_seen

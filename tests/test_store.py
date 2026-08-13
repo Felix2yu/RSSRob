@@ -78,3 +78,26 @@ def test_prune_old_is_scoped_to_one_feed(tmp_path):
     s.prune_old("a", max_age_seconds=365 * 86400, now=1_750_000_000.0)
     assert len(s.recent("a", 10)) == 0
     assert len(s.recent("b", 10)) == 1
+
+
+def test_category_roundtrips(tmp_path):
+    from rssrob.models import Item
+    s = Store(str(tmp_path / "t.db"))
+    s.insert_new("f", [Item(id="1", title="t", category="话剧")], 1000.0)
+    rows = s.recent("f", 10)
+    assert rows[0].category == "话剧"
+
+
+def test_old_database_migrated_with_category_column(tmp_path):
+    import sqlite3
+    db = str(tmp_path / "old.db")
+    conn = sqlite3.connect(db)
+    conn.execute("CREATE TABLE items (feed TEXT, id TEXT, title TEXT, link TEXT, "
+                 "summary TEXT, published REAL, first_seen REAL, "
+                 "PRIMARY KEY (feed, id))")
+    conn.commit()
+    conn.close()
+    s = Store(db)                                  # migration runs on open
+    from rssrob.models import Item
+    s.insert_new("f", [Item(id="1", title="t", category="音乐会")], 1000.0)
+    assert s.recent("f", 1)[0].category == "音乐会"

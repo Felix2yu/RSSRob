@@ -12,12 +12,17 @@ CREATE TABLE IF NOT EXISTS items (
     title      TEXT,
     link       TEXT,
     summary    TEXT,
+    category   TEXT,
     published  REAL,
     first_seen REAL NOT NULL,
     PRIMARY KEY (feed, id)
 );
 CREATE INDEX IF NOT EXISTS idx_items_order ON items (feed, published, first_seen);
 """
+
+_MIGRATIONS = [
+    ("ALTER TABLE items ADD COLUMN category TEXT", "category"),
+]
 
 
 class Store:
@@ -29,6 +34,10 @@ class Store:
 
     def init_schema(self) -> None:
         self.conn.executescript(SCHEMA)
+        cols = {r["name"] for r in self.conn.execute("PRAGMA table_info(items)")}
+        for sql, col in _MIGRATIONS:
+            if col not in cols:          # upgrade old databases in place
+                self.conn.execute(sql)
         self.conn.commit()
 
     def insert_new(self, feed: str, items, now: float) -> int:
@@ -40,9 +49,10 @@ class Store:
             published = _parse_date(item.date, now)
             cur.execute(
                 "INSERT OR IGNORE INTO items "
-                "(feed, id, title, link, summary, published, first_seen) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (feed, item.id, item.title, item.link, item.summary, published, now),
+                "(feed, id, title, link, summary, category, published, first_seen) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (feed, item.id, item.title, item.link, item.summary,
+                 getattr(item, "category", None), published, now),
             )
             inserted += cur.rowcount
         self.conn.commit()
@@ -57,7 +67,7 @@ class Store:
 
     def recent(self, feed: str, limit: int) -> List[StoredItem]:
         rows = self.conn.execute(
-            "SELECT id, title, link, summary, published, first_seen "
+            "SELECT id, title, link, summary, category, published, first_seen "
             "FROM items WHERE feed = ? "
             "ORDER BY COALESCE(published, first_seen) DESC LIMIT ?",
             (feed, limit),

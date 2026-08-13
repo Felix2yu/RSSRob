@@ -1,7 +1,7 @@
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import yaml
 
@@ -34,6 +34,18 @@ def normalize_proxy(value):
     return f"http://{s}"                                  # bare host:port -> http
 
 
+def normalize_browserless(value):
+    """Normalize a browserless service URL (adds ``http://`` when scheme-less)."""
+    if value is None or isinstance(value, bool):
+        return None
+    s = str(value).strip()
+    if not s:
+        return None
+    if not re.match(r"^https?://", s, re.I):
+        s = f"http://{s}"
+    return s.rstrip("/")
+
+
 @dataclass
 class HttpConfig:
     host: str = "127.0.0.1"
@@ -57,6 +69,8 @@ class Site:
     timeout: int = 20
     user_agent: str = "RSSRob/0.1"
     proxy: Optional[str] = None      # per-feed proxy URL (or bare port)
+    browserless: Optional[str] = None  # browserless headless-browser service URL
+    api: Optional[Dict[str, Any]] = None  # pageapi: {url, method?, headers?, wait?}
     article: Dict[str, str] = field(default_factory=dict)  # follow-link selectors
     filter: Optional[FeedFilter] = None    # keyword/regex include-exclude
     max_age_days: int = 365    # delete items older than this; 0 = keep forever
@@ -150,7 +164,7 @@ def _build_site(raw: dict, defaults: dict) -> Site:
     name = raw["name"]
 
     stype = raw.get("type", "html")
-    if stype not in ("html", "rss", "wechat", "twitter"):
+    if stype not in ("html", "rss", "wechat", "twitter", "pageapi"):
         raise ConfigError(f"site {name!r} has unknown type: {stype!r}")
 
     if stype == "wechat":
@@ -173,6 +187,21 @@ def _build_site(raw: dict, defaults: dict) -> Site:
                 extract.validate_selector(sel)
         except ValueError as e:
             raise ConfigError(f"site {name!r}: {e}") from e
+    elif stype == "pageapi":
+        api = raw.get("api") or {}
+        if not api.get("url"):
+            raise ConfigError(f"site {name!r} (pageapi) missing required key: api.url")
+        if "item" not in raw:
+            raise ConfigError(f"site {name!r} (pageapi) missing required key: item")
+        if "fields" not in raw:
+            raise ConfigError(f"site {name!r} (pageapi) missing required key: fields")
+        try:
+            extract.validate_json_selector(raw["item"])
+            for sel in (raw.get("fields") or {}).values():
+                if "{$" not in sel:            # templates skip path validation
+                    extract.validate_json_selector(sel)
+        except ValueError as e:
+            raise ConfigError(f"site {name!r}: {e}") from e
 
     return Site(
         name=name,
@@ -193,6 +222,9 @@ def _build_site(raw: dict, defaults: dict) -> Site:
         timeout=raw.get("timeout", defaults.get("timeout", 20)),
         user_agent=raw.get("user_agent", defaults.get("user_agent", "RSSRob/0.1")),
         proxy=normalize_proxy(raw.get("proxy", defaults.get("proxy"))),
+        browserless=normalize_browserless(
+            raw.get("browserless", defaults.get("browserless"))),
+        api=raw.get("api") if stype == "pageapi" else None,
         article=raw.get("article") or {},
         filter=filters.build_filter(raw.get("filter")),
         max_age_days=max(0, raw.get("max_age_days", defaults.get("max_age_days", 365))),

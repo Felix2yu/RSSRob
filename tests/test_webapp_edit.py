@@ -286,3 +286,80 @@ def test_enrich_endpoint_respects_login_gate(tmp_path):
     r = client.post("/enrich", json={"site": "ipp", "links": ["http://a"]})
     assert r.status_code == 302
     assert "/login" in r.headers["Location"]
+
+
+# --- pageapi: save + edit prefill -------------------------------------------
+
+PAGEAPI_FEED = """\
+name: szwtfz
+type: pageapi
+url: https://szwtfz.maitix.com/h5/
+browserless: http://browserless:3000
+api:
+  url: https://client.maitix.com/api/pro/projects
+  headers:
+    Origin: https://szwtfz.maitix.com
+  wait: 6000
+item: "$.data.dataList"
+fields:
+  title: "$.projectName"
+  link: "https://szwtfz.maitix.com/h5/#/pages-order/projectDetail/index?projectId={$.projectToken}"
+  date: "$.startTime"
+  category: "$.projectTypeName"
+"""
+
+
+def test_save_pageapi_writes_api_block(tmp_path):
+    wa = _load_webapp()
+    client, d = _app(wa, tmp_path, {})
+    r = client.post("/save", data={
+        "name": "szwtfz", "type": "pageapi",
+        "url": "https://szwtfz.maitix.com/h5/",
+        "item": "$.data.dataList",
+        "title_sel": "$.projectName",
+        "link_sel": "https://szwtfz.maitix.com/h5/#/pages-order/projectDetail/index?projectId={$.projectToken}",
+        "date_sel": "$.startTime",
+        "category_sel": "$.projectTypeName",
+        "api_url": "https://client.maitix.com/api/pro/projects",
+        "api_wait": "6000",
+        "api_headers": '{"Origin": "https://szwtfz.maitix.com"}',
+    })
+    assert r.status_code == 302
+    raw = yaml.safe_load((d / "szwtfz.yaml").read_text(encoding="utf-8"))
+    assert raw["type"] == "pageapi"
+    assert raw["api"] == {"url": "https://client.maitix.com/api/pro/projects",
+                          "wait": 6000, "headers": {"Origin": "https://szwtfz.maitix.com"}}
+    assert raw["item"] == "$.data.dataList"
+    assert raw["fields"]["category"] == "$.projectTypeName"
+
+
+def test_save_pageapi_requires_api_url(tmp_path):
+    wa = _load_webapp()
+    client, _ = _app(wa, tmp_path, {})
+    r = client.post("/save", data={
+        "name": "szwtfz", "type": "pageapi", "url": "https://szwtfz.maitix.com/h5/",
+        "item": "$.a", "title_sel": "$.b",
+    })
+    assert r.status_code == 302 and "save_error" in r.headers["Location"]
+
+
+def test_save_pageapi_rejects_bad_headers_json(tmp_path):
+    wa = _load_webapp()
+    client, _ = _app(wa, tmp_path, {})
+    r = client.post("/save", data={
+        "name": "szwtfz", "type": "pageapi", "url": "https://szwtfz.maitix.com/h5/",
+        "item": "$.a", "title_sel": "$.b",
+        "api_url": "http://a/", "api_headers": "not json",
+    })
+    assert r.status_code == 302 and "save_error" in r.headers["Location"]
+
+
+def test_edit_prefills_pageapi_fields(tmp_path):
+    wa = _load_webapp()
+    client, _ = _app(wa, tmp_path, {"szwtfz.yaml": PAGEAPI_FEED})
+    html = client.get("/playground",
+                      query_string={"site": "szwtfz", "edit": "1"}).get_data(as_text=True)
+    assert 'value="https://client.maitix.com/api/pro/projects"' in html   # api_url
+    assert 'value="6000"' in html                                          # api_wait
+    assert "$.data.dataList" in html                                       # item
+    assert "projectTypeName" in html                                       # category

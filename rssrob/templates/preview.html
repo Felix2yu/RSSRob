@@ -174,6 +174,15 @@
             {{ name }} <code>{{ sel }}</code>{% if not loop.last %} · {% endif %}
           {% endfor %}
         </div>
+      {% elif site.type == "pageapi" %}
+        <div>API: <code>{{ site.api.url }}</code>{% if site.api.wait %} · 等待
+          <code>{{ site.api.wait }}ms</code>{% endif %}</div>
+        <div>条目路径: <code>{{ site.item }}</code></div>
+        <div>字段:
+          {% for name, sel in site.fields.items() %}
+            {{ name }} <code>{{ sel }}</code>{% if not loop.last %} · {% endif %}
+          {% endfor %}
+        </div>
       {% else %}
         <div>解析已有的 RSS/Atom 订阅源（无需选择器）。</div>
       {% endif %}

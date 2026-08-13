@@ -4,6 +4,11 @@ services:
     container_name: rssrob
     ports:
       - "5000:5000"
+    environment:
+      # 全局无头浏览器服务（可选的 browserless 部署）；也可在 sites.yaml 按站点配 browserless:
+      RSSROB_BROWSERLESS: ${RSSROB_BROWSERLESS:-}
+      # 全局代理（可选）
+      RSSROB_PROXY: ${RSSROB_PROXY:-}
     volumes:
       - ./configs:/app/configs
       - ./var:/app/var

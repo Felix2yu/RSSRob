@@ -21,6 +21,7 @@ or set RSSROB_PROXY in the environment.
 
 import argparse
 import io
+import json
 import os
 import re
 import sys
@@ -41,7 +42,9 @@ from flask import (Flask, abort, jsonify, redirect, render_template, request,
 
 from rssrob.article import fetch_article
 from rssrob.backup import build_backup, restore_backup
-from rssrob.config import ConfigError, load_config, normalize_proxy
+from rssrob.config import (ConfigError, load_config, normalize_browserless,
+                           normalize_proxy)
+from rssrob.fetch import fetch_in_browserless
 from rssrob.digest import SentStore, send_subscriber_digest
 from rssrob.filters import apply_filter, parse_terms
 from rssrob.extract import extract_items
@@ -111,6 +114,11 @@ _ITEM_CACHE: dict = {}         # url -> (full_title, description) cached across 
 # --proxy / --proxy-port on the CLI (see __main__) for the global default.
 PROXY_URL = os.environ.get("RSSROB_PROXY") or None
 
+# Global default headless-browser service (Docker-friendly): any fetch without
+# its own per-feed `browserless:` config renders via this service instead of a
+# plain GET. Per-feed browserless lives in each site's `browserless:` config.
+BROWSERLESS_URL = os.environ.get("RSSROB_BROWSERLESS") or None
+
 # Per-feed notification target list (gitignored).
 NOTIF_TARGETS = NotificationTargets(str(REPO_ROOT / "var" / "notification_targets.json"))
 SUBS = Subscribers(str(REPO_ROOT / "var" / "subscribers.json"))
@@ -125,7 +133,11 @@ PLAYGROUND_DEFAULTS = {
     "link_sel": "xpath:.//a/@href",
     "date_sel": "xpath:.//span",
     "proxy": "",
+    "browserless": "",   # headless-browser renderer (JS-challenge sites)
     "article_sel": "",     # html: article-body selector -> article.content (descriptions)
+    "api_url": "",         # pageapi: API URL fetched from inside the page
+    "api_wait": "",        # pageapi: ms to wait for the WAF SDK to initialize
+    "api_headers": "",     # pageapi: extra headers as JSON (e.g. {"Origin": ...})
     "account_id": "",      # wechat: 公众号 fakeid
     "account_name": "",    # wechat/twitter: human label
     "username": "",        # twitter: @handle (no leading @)
@@ -363,21 +375,32 @@ class FallbackFetcher:
 
     Shares the ``get`` shape of ``rssrob.fetch.Fetcher`` so it drops straight
     into ``rssrob.pipeline.obtain_items``. Records which source was used so the
-    page can show a live/offline badge.
+    page can show a live/offline badge. A `browserless` URL renders pages in a
+    headless browser (JS-challenge-protected sites) instead of a plain GET.
     """
 
-    def __init__(self, fallback_files, proxy=None):
+    def __init__(self, fallback_files, proxy=None, browserless=None):
         self.fallback_files = fallback_files
         self.proxy = proxy or PROXY_URL   # per-feed proxy, else the global default
+        self.browserless = normalize_browserless(
+            browserless or BROWSERLESS_URL)  # per-feed, else the global default
         self.source = None   # "live" | "saved"
         self.error = None    # the live error message when we fell back
 
     def get(self, url, timeout=20, user_agent="RSSRob/0.1"):
-        proxies = {"http": self.proxy, "https": self.proxy} if self.proxy else None
         try:
-            resp = requests.get(url, timeout=timeout,
-                                headers={"User-Agent": user_agent},
-                                proxies=proxies)
+            if self.browserless:
+                resp = requests.post(
+                    f"{self.browserless}/content",
+                    json={"url": url, "userAgent": user_agent,
+                          "waitForTimeout": 3000,
+                          "gotoOptions": {"waitUntil": "domcontentloaded"}},
+                    timeout=timeout + 10)
+            else:
+                proxies = {"http": self.proxy, "https": self.proxy} if self.proxy else None
+                resp = requests.get(url, timeout=timeout,
+                                    headers={"User-Agent": user_agent},
+                                    proxies=proxies)
             resp.raise_for_status()
             self.source = "live"
             return resp.content
@@ -389,6 +412,15 @@ class FallbackFetcher:
                 with open(path, "rb") as f:
                     return f.read()
             raise
+
+
+def fetch_page_api(self, page_url, api, timeout=30):
+        """In-page API fetch (pageapi feeds) via the browserless service."""
+        if not self.browserless:
+            raise RuntimeError(
+                "pageapi feed needs a browserless service — set the site's "
+                "`browserless:` key or the RSSROB_BROWSERLESS env var")
+        return fetch_in_browserless(self.browserless, page_url, api, timeout)
 
 
 def _cached_feed(config, site):
@@ -435,7 +467,8 @@ def index():
     if site is None:
         abort(404, description=f"no such site: {site_name}")
 
-    fetcher = FallbackFetcher(FALLBACK_FILES, proxy=site.proxy)
+    fetcher = FallbackFetcher(FALLBACK_FILES, proxy=site.proxy,
+                              browserless=site.browserless)
     # wechat/twitter feeds are fetched via their API clients, not an HTTP fetch.
     wechat_client = _wechat_client() if site.type == "wechat" else None
     twitter_client = _twitter_client() if site.type == "twitter" else None
@@ -541,7 +574,8 @@ def run_now(name):
     if not Path(output_dir).is_absolute():
         output_dir = str(REPO_ROOT / output_dir)
     store = Store(config.state_db)
-    fetcher = FallbackFetcher(FALLBACK_FILES, proxy=site.proxy)
+    fetcher = FallbackFetcher(FALLBACK_FILES, proxy=site.proxy,
+                              browserless=site.browserless)
 
     def _scrape():
         try:
@@ -577,7 +611,8 @@ def enrich_items():
     if site is None:
         return jsonify({}), 404
 
-    fetcher = FallbackFetcher(FALLBACK_FILES, proxy=site.proxy)
+    fetcher = FallbackFetcher(FALLBACK_FILES, proxy=site.proxy,
+                              browserless=site.browserless)
     results = {}
     with ThreadPoolExecutor(max_workers=8) as pool:
         futs = {pool.submit(_enrich_one, link, fetcher, site.article): link
@@ -762,6 +797,7 @@ def playground():
         prefill_type = site.type
         defaults["url"] = site.url or ""
         defaults["proxy"] = site.proxy or ""
+        defaults["browserless"] = site.browserless or ""
         if site.type == "html":
             defaults.update(
                 item=site.item or defaults["item"],
@@ -776,6 +812,18 @@ def playground():
         elif site.type == "twitter":
             defaults["username"] = site.username or ""
             defaults["account_name"] = site.account_name or ""
+        elif site.type == "pageapi":
+            defaults.update(
+                item=site.item or defaults["item"],
+                title_sel=site.fields.get("title", ""),
+                link_sel=site.fields.get("link", ""),
+                date_sel=site.fields.get("date", ""),
+                api_url=(site.api or {}).get("url", ""),
+                api_wait=str((site.api or {}).get("wait", "")),
+                api_headers=json.dumps((site.api or {}).get("headers") or {},
+                                       ensure_ascii=False)
+                if (site.api or {}).get("headers") else "",
+            )
     form = {k: request.args.get(k, v) for k, v in defaults.items()}
     ptype = request.args.get("type") or prefill_type or "html"
 
@@ -795,7 +843,9 @@ def playground():
     kept_n = total = 0
     if ptype in ("html", "rss"):
         try:
-            fetcher = FallbackFetcher(FALLBACK_FILES, proxy=normalize_proxy(form.get("proxy")))
+            fetcher = FallbackFetcher(
+                FALLBACK_FILES, proxy=normalize_proxy(form.get("proxy")),
+                browserless=normalize_browserless(form.get("browserless")))
             content = fetcher.get(form["url"])
             source = fetcher.source
             if ptype == "rss":
@@ -833,7 +883,8 @@ def _form_params(src):
     """All playground inputs from a form/args, for round-tripping in a redirect."""
     params = {k: src.get(k, "") for k in
               ("type", "url", "item", "title_sel", "link_sel", "date_sel", "proxy",
-               "article_sel", "account_id", "account_name", "username",
+               "browserless", "article_sel", "api_url", "api_wait", "api_headers",
+               "account_id", "account_name", "username",
                "include", "exclude", "field", "name", "site_title")}
     if src.get("regex") == "on":
         params["regex"] = "on"
@@ -844,7 +895,8 @@ def _form_params(src):
 # replaced from the form; every other saved key (max_items, interval,
 # max_age_days, user_agent, …) is preserved so editing never silently drops it.
 _FORM_KEYS = {"name", "type", "url", "item", "fields", "title", "description", "proxy",
-              "filter", "article", "account_id", "account_name", "username"}
+              "browserless", "api", "filter", "article", "account_id", "account_name",
+              "username"}
 
 
 def _load_existing_site(save_path, name):
@@ -932,6 +984,41 @@ def save():
         an = (request.form.get("account_name") or "").strip()
         if an:
             site["account_name"] = an
+    elif ptype == "pageapi":
+        site["url"] = (request.form.get("url") or "").strip()
+        site["item"] = (request.form.get("item") or "").strip()
+        site["fields"] = {k: v for k, v in
+                          (("title", (request.form.get("title_sel") or "").strip()),
+                           ("link", (request.form.get("link_sel") or "").strip()),
+                           ("date", (request.form.get("date_sel") or "").strip()),
+                           ("category", (request.form.get("category_sel") or "").strip())) if v}
+        api_url = (request.form.get("api_url") or "").strip()
+        if not api_url:
+            return redirect(url_for("playground",
+                save_error="pageapi feeds need an API URL (api.url) — the data endpoint "
+                           "fetched from inside the rendered page",
+                **_form_params(request.form)))
+        api = {"url": api_url}
+        wait = (request.form.get("api_wait") or "").strip()
+        if wait:
+            try:
+                api["wait"] = int(wait)
+            except ValueError:
+                return redirect(url_for("playground",
+                    save_error="api_wait must be a number of milliseconds",
+                    **_form_params(request.form)))
+        hdr = (request.form.get("api_headers") or "").strip()
+        if hdr:
+            try:
+                api["headers"] = json.loads(hdr)
+                if not isinstance(api["headers"], dict):
+                    raise ValueError
+            except ValueError:
+                return redirect(url_for("playground",
+                    save_error="api headers must be a JSON object like "
+                               '{"Origin": "https://szwtfz.maitix.com"}',
+                    **_form_params(request.form)))
+        site["api"] = api
     else:                                   # html or rss
         site["url"] = (request.form.get("url") or "").strip()
         if ptype == "html":
@@ -951,6 +1038,10 @@ def save():
     proxy = normalize_proxy(request.form.get("proxy"))
     if proxy:
         site["proxy"] = proxy
+
+    browserless = normalize_browserless(request.form.get("browserless"))
+    if browserless:
+        site["browserless"] = browserless
 
     flt = {}
     if parse_terms(include):
