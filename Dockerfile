@@ -1,4 +1,6 @@
-FROM python:3.14-slim AS base
+# Docker Hub rate-limits anonymous pulls from CI runners, so use the ECR
+# public mirror of the official python image instead.
+FROM public.ecr.aws/docker/library/python:3.14-slim AS base
 
 WORKDIR /app
 
