@@ -143,3 +143,16 @@ def test_extract_json_items_maitix_shape():
 def test_extract_json_items_not_a_list_raises():
     with pytest.raises(ValueError):
         extract_json_items(MAITIX_DOC, "$.data.totalRow", {"title": "$.x"})
+
+
+def test_extract_json_items_cleans_null_undefined_literals():
+    from rssrob.extract import extract_json_items
+    doc = {"data": {"list": [
+        {"a": "x", "t": "undefined", "d": "null", "n": None},
+    ]}}
+    items = extract_json_items(doc, "$.data.list",
+                               {"title": "$.a", "summary": "$.t",
+                                "date": "$.d", "category": "$.n"})
+    assert items[0].summary is None
+    assert items[0].date is None
+    assert items[0].category is None

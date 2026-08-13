@@ -66,6 +66,16 @@ def render_json_template(template: str, row) -> str:
     return _TEMPLATE_RE.sub(_repl, template)
 
 
+def _clean(v):
+    """Normalize a raw field value: None and JS-ish 'null'/'undefined'
+    literals (dirty backends stringify nulls) become None."""
+    if v is None:
+        return None
+    if isinstance(v, str) and v.strip().lower() in ("null", "undefined", "none"):
+        return None
+    return v
+
+
 def extract_json_items(doc, item_path: str, fields: dict) -> list:
     """Extract items from a parsed JSON document.
 
@@ -83,7 +93,7 @@ def extract_json_items(doc, item_path: str, fields: dict) -> list:
             elif isinstance(spec, str) and "{$" in spec:
                 values[name] = render_json_template(spec, row)
             else:
-                v = json_get(row, spec)
+                v = _clean(json_get(row, spec))
                 values[name] = None if v is None else str(v)
         link = values.get("link")
         item_id = values.get("id") or link
