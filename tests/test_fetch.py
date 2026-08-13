@@ -73,7 +73,7 @@ def test_fetch_in_browserless_posts_function_and_returns_json():
     body = kwargs["data"].decode()
     assert kwargs["headers"]["Content-Type"] == "application/javascript"
     assert body.count("szwtfz.maitix.com") == 2          # page + API url
-    assert "waitForTimeout(cfg.waitMs)" in body
+    assert "setTimeout(r, ms)), cfg.waitMs" in body
     assert '"waitMs": 6000' in body
     assert "credentials: 'include'" in body
     assert kwargs["timeout"] == 40

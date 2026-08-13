@@ -6,14 +6,22 @@ import requests
 from .config import normalize_browserless
 
 
-def _raise_browserless_error(resp):
+def _raise_browserless_error(resp, attempts=None):
     """Turn a non-2xx browserless response into an error that carries the
-    service's own error body (browserless 500s usually explain the cause)."""
+    service's own error body (browserless 500s usually explain the cause).
+    ``attempts`` lists earlier tries (e.g. the v2 payload that got rejected
+    before the v1 fallback) so the caller can see which variant failed."""
     try:
         detail = resp.text[:500]
     except Exception:
         detail = ""
-    raise RuntimeError(f"browserless HTTP {resp.status_code}: {detail}")
+    msg = f"browserless HTTP {resp.status_code}: {detail}"
+    if attempts:
+        tried = ", ".join(
+            f"HTTP {r.status_code}: {r.text[:120]}" for r in attempts[:-1])
+        if tried:
+            msg += f" (earlier tries: {tried})"
+    raise RuntimeError(msg)
 
 
 def _post_browserless(url, v2_payload, v1_payload, timeout):
@@ -22,10 +30,16 @@ def _post_browserless(url, v2_payload, v1_payload, timeout):
     browserless v2 strictly rejects unknown/ill-typed fields with 4xx (e.g.
     /function wants ``code``, userAgent is an object), while v1 ignores them
     and wants the old shapes (``function`` key, string userAgent). Try the v2
-    payload first; on a 4xx fall back to the v1 payload exactly once."""
+    payload first; on a 4xx fall back to the v1 payload exactly once. On
+    failure the error message lists every attempt."""
+    attempts = []
     resp = requests.post(url, json=v2_payload, timeout=timeout)
+    attempts.append(resp)
     if 400 <= resp.status_code < 500 and v1_payload is not None:
         resp = requests.post(url, json=v1_payload, timeout=timeout)
+        attempts.append(resp)
+    if not resp.ok:
+        _raise_browserless_error(resp, attempts=attempts)
     return resp
 
 
@@ -50,7 +64,7 @@ def fetch_in_browserless(browserless_url, page_url, api, timeout: int = 30):
     async ({ page }) => {
       const cfg = %s;
       await page.goto(cfg.pageUrl, { waitUntil: 'domcontentloaded' });
-      await page.waitForTimeout(cfg.waitMs);
+      await page.evaluate((ms) => new Promise((r) => setTimeout(r, ms)), cfg.waitMs);
       return await page.evaluate(async (c) => {
         const res = await fetch(c.url, {
           method: c.method || 'GET',
@@ -66,16 +80,19 @@ def fetch_in_browserless(browserless_url, page_url, api, timeout: int = 30):
     base = normalize_browserless(browserless_url)
     # v2 runs the code in-browser as an ES module — send it as raw JavaScript
     # (the documented /function usage). v1 wants a JSON {"function": ...}.
+    attempts = []
     resp = requests.post(f"{base}/function",
                          data=("export default " + code).encode(),
                          headers={"Content-Type": "application/javascript"},
                          timeout=timeout + 10)
+    attempts.append(resp)
     if resp.status_code == 400:      # v1 fallback
         resp = requests.post(f"{base}/function",
                              json={"function": "module.exports = " + code},
                              timeout=timeout + 10)
+        attempts.append(resp)
     if not resp.ok:
-        _raise_browserless_error(resp)
+        _raise_browserless_error(resp, attempts=attempts)
     out = resp.json()
     if not out.get("__ok"):
         raise RuntimeError(
@@ -130,8 +147,6 @@ class Fetcher:
         }
         resp = _post_browserless(f"{self.browserless}/content", v2_body, v1_body,
                                  timeout + 10)
-        if not resp.ok:
-            _raise_browserless_error(resp)
         return resp.content
 
     def fetch_page_api(self, page_url: str, api: dict, timeout: int = 30):
