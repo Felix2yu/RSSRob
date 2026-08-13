@@ -51,8 +51,11 @@ def fetch_in_browserless(browserless_url, page_url, api, timeout: int = 30):
     API call must carry signature headers the browser SDK generates at runtime —
     ``POST /content`` alone cannot help because the data lives behind an API,
     not in the rendered HTML. ``api`` is a dict with ``url`` (+ optional
-    ``method``, ``headers``); ``wait`` (ms) is the post-load settle time for
-    the WAF SDK to initialize."""
+    ``method``, ``headers``); ``wait`` (ms) caps how long we wait after page
+    load for the SDK to initialize and fire a real API request whose
+    signature headers (``bx-ua``, ``x-xsrf-token``, …) we capture and replay.
+    If none is captured we still send the request with the configured
+    headers — best effort for less-protected APIs."""
     cfg = {
         "pageUrl": page_url,
         "waitMs": int(api.get("wait") or 5000),
@@ -63,8 +66,29 @@ def fetch_in_browserless(browserless_url, page_url, api, timeout: int = 30):
     code = """
     async ({ page }) => {
       const cfg = %s;
+      const PICK = ['bx-ua','bx-umidtoken','coeus','epeius','hecate',
+                    'site','x-mz-session','x-xsrf-token','x-px-*'];
+      let captured = null;
+      page.on('request', (req) => {
+        if (captured || !/\\/api\\//.test(req.url())) return;
+        const h = req.headers();
+        const pick = {};
+        for (const k of PICK) {
+          if (h[k]) pick[k] = h[k];
+          else {
+            for (const hk of Object.keys(h)) {
+              if (hk.startsWith(k.replace('*', ''))) pick[hk] = h[hk];
+            }
+          }
+        }
+        if (Object.keys(pick).length) captured = pick;
+      });
       await page.goto(cfg.pageUrl, { waitUntil: 'domcontentloaded' });
-      await page.evaluate((ms) => new Promise((r) => setTimeout(r, ms)), cfg.waitMs);
+      const deadline = Date.now() + cfg.waitMs;
+      while (!captured && Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 250));
+      }
+      const headers = Object.assign({}, cfg.headers, captured || {});
       return await page.evaluate(async (c) => {
         const res = await fetch(c.url, {
           method: c.method || 'GET',
@@ -74,7 +98,7 @@ def fetch_in_browserless(browserless_url, page_url, api, timeout: int = 30):
         const text = await res.text();
         try { return { __ok: true, data: JSON.parse(text) }; }
         catch (e) { return { __ok: false, data: text }; }
-      }, cfg);
+      }, Object.assign({}, cfg, { headers }));
     }
     """ % json.dumps(cfg)
     base = normalize_browserless(browserless_url)
