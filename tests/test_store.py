@@ -101,3 +101,10 @@ def test_old_database_migrated_with_category_column(tmp_path):
     from rssrob.models import Item
     s.insert_new("f", [Item(id="1", title="t", category="音乐会")], 1000.0)
     assert s.recent("f", 1)[0].category == "音乐会"
+
+
+def test_parse_date_handles_epoch_millis_and_seconds():
+    from rssrob.store import _parse_date
+    assert _parse_date("1767110460000") == 1767110460.0   # millis
+    assert _parse_date("1786685400") == 1786685400.0      # seconds
+    assert _parse_date("not-a-date") is None

@@ -99,6 +99,13 @@ def _parse_date(raw: Optional[str], now: float = None) -> Optional[float]:
     date-only strings like '2026-07-16' get a realistic time."""
     if not raw:
         return None
+    # Epoch timestamps: 13 digits are milliseconds, 10 digits are seconds.
+    s = str(raw).strip()
+    if s.isdigit() and len(s) >= 10:
+        try:
+            return int(s) / 1000.0 if len(s) >= 12 else float(s)
+        except ValueError:
+            pass
     try:
         dt = dateparser.parse(raw)
         if dt is None:
