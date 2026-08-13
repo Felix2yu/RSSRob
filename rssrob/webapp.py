@@ -44,7 +44,8 @@ from rssrob.article import fetch_article
 from rssrob.backup import build_backup, restore_backup
 from rssrob.config import (ConfigError, load_config, normalize_browserless,
                            normalize_proxy)
-from rssrob.fetch import _raise_browserless_error, fetch_in_browserless
+from rssrob.fetch import (_post_browserless, _raise_browserless_error,
+                          fetch_in_browserless)
 from rssrob.digest import SentStore, send_subscriber_digest
 from rssrob.filters import apply_filter, parse_terms
 from rssrob.extract import extract_items
@@ -390,13 +391,16 @@ class FallbackFetcher:
     def get(self, url, timeout=20, user_agent="RSSRob/0.1"):
         try:
             if self.browserless:
-                resp = requests.post(
-                    f"{self.browserless}/content",
-                    json={"url": url,
-                          "userAgent": {"userAgent": user_agent},   # v2: object
-                          "waitForTimeout": 3000,
-                          "gotoOptions": {"waitUntil": "domcontentloaded"}},
-                    timeout=timeout + 10)
+                v2_body = {"url": url,
+                           "userAgent": {"userAgent": user_agent},   # v2: object
+                           "waitForTimeout": 3000,
+                           "gotoOptions": {"waitUntil": "domcontentloaded"}}
+                v1_body = {"url": url,
+                           "userAgent": user_agent,                  # v1: string
+                           "waitForTimeout": 3000,
+                           "gotoOptions": {"waitUntil": "domcontentloaded"}}
+                resp = _post_browserless(f"{self.browserless}/content",
+                                         v2_body, v1_body, timeout + 10)
             else:
                 proxies = {"http": self.proxy, "https": self.proxy} if self.proxy else None
                 resp = requests.get(url, timeout=timeout,

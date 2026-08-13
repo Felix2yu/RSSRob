@@ -16,6 +16,19 @@ def _raise_browserless_error(resp):
     raise RuntimeError(f"browserless HTTP {resp.status_code}: {detail}")
 
 
+def _post_browserless(url, v2_payload, v1_payload, timeout):
+    """POST with v1/v2 compatibility.
+
+    browserless v2 strictly rejects unknown/ill-typed fields with 4xx (e.g.
+    /function wants ``code``, userAgent is an object), while v1 ignores them
+    and wants the old shapes (``function`` key, string userAgent). Try the v2
+    payload first; on a 4xx fall back to the v1 payload exactly once."""
+    resp = requests.post(url, json=v2_payload, timeout=timeout)
+    if 400 <= resp.status_code < 500 and v1_payload is not None:
+        resp = requests.post(url, json=v1_payload, timeout=timeout)
+    return resp
+
+
 def fetch_in_browserless(browserless_url, page_url, api, timeout: int = 30):
     """Render ``page_url`` in a headless browser and fetch an API *inside the
     page context*, returning the parsed JSON.
@@ -50,8 +63,10 @@ def fetch_in_browserless(browserless_url, page_url, api, timeout: int = 30):
       }}, cfg);
     }}
     """
-    resp = requests.post(f"{normalize_browserless(browserless_url)}/function",
-                         json={"code": code}, timeout=timeout + 10)
+    resp = _post_browserless(f"{normalize_browserless(browserless_url)}/function",
+                             {"code": code},      # v2
+                             {"function": code},  # v1
+                             timeout + 10)
     if not resp.ok:
         _raise_browserless_error(resp)
     out = resp.json()
@@ -94,14 +109,20 @@ class Fetcher:
         Waits up to 3s after page load so WAF JS challenges (token/cookie
         generation) have time to finish; browserless applies the challenge's
         cookies to the final response."""
-        body = {
+        v2_body = {
             "url": url,
-            "userAgent": {"userAgent": user_agent},   # v2: object, not string
+            "userAgent": {"userAgent": user_agent},   # v2: object
             "waitForTimeout": 3000,
             "gotoOptions": {"waitUntil": "domcontentloaded"},
         }
-        resp = requests.post(f"{self.browserless}/content", json=body,
-                             timeout=timeout + 10)
+        v1_body = {
+            "url": url,
+            "userAgent": user_agent,                  # v1: plain string
+            "waitForTimeout": 3000,
+            "gotoOptions": {"waitUntil": "domcontentloaded"},
+        }
+        resp = _post_browserless(f"{self.browserless}/content", v2_body, v1_body,
+                                 timeout + 10)
         if not resp.ok:
             _raise_browserless_error(resp)
         return resp.content

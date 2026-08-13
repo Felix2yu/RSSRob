@@ -20,6 +20,7 @@ def test_fetcher_returns_content_and_sets_headers():
 def test_fetcher_renders_via_browserless_content_api():
     class Resp:
         ok = True
+        status_code = 200
         content = b"<html>rendered</html>"
         def raise_for_status(self):
             pass
@@ -54,6 +55,7 @@ def test_fetcher_browserless_falls_back_to_env_var(monkeypatch):
 def test_fetch_in_browserless_posts_function_and_returns_json():
     class Resp:
         ok = True
+        status_code = 200
         def raise_for_status(self):
             pass
         def json(self):
@@ -78,6 +80,7 @@ def test_fetch_in_browserless_posts_function_and_returns_json():
 def test_fetch_in_browserless_raises_on_non_json():
     class Resp:
         ok = True
+        status_code = 200
         def raise_for_status(self):
             pass
         def json(self):
@@ -89,3 +92,54 @@ def test_fetch_in_browserless_raises_on_non_json():
             assert False, "should have raised"
         except RuntimeError as e:
             assert "did not return JSON" in str(e)
+
+
+def test_fetch_in_browserless_falls_back_to_v1_function_key():
+    """v1 browserless rejects `code` (unknown field) with 4xx — must retry
+    with the legacy `function` key."""
+    class Ok:
+        ok = True
+        def json(self):
+            return {"__ok": True, "data": {"n": 1}}
+
+    class Bad:
+        ok = False
+        status_code = 400
+        text = '{"error":"code is not a function"}'
+
+    calls = []
+    def fake_post(url, json=None, timeout=None):
+        calls.append((url, json))
+        if len(calls) == 1:
+            return Bad()
+        return Ok()
+
+    with patch("rssrob.fetch.requests.post", side_effect=fake_post):
+        out = fetch_in_browserless("http://bl:3000", "http://p/",
+                                   {"url": "http://a/"}, timeout=30)
+    assert out == {"n": 1}
+    assert list(calls[0][1]) == ["code"]           # v2 first
+    assert list(calls[1][1]) == ["function"]       # v1 fallback on 4xx
+    assert calls[1][1]["function"] == calls[0][1]["code"]
+
+
+def test_content_falls_back_to_v1_string_user_agent():
+    class Ok:
+        ok = True
+        content = b"<html>v1</html>"
+
+    class Bad:
+        ok = False
+        status_code = 400
+        text = "userAgent must be an object"
+
+    calls = []
+    def fake_post(url, json=None, timeout=None):
+        calls.append(json)
+        return Bad() if len(calls) == 1 else Ok()
+
+    with patch("rssrob.fetch.requests.post", side_effect=fake_post):
+        out = Fetcher(browserless="bl:3000").get("http://x/", timeout=20, user_agent="UA")
+    assert out == b"<html>v1</html>"
+    assert calls[0]["userAgent"] == {"userAgent": "UA"}   # v2 object form
+    assert calls[1]["userAgent"] == "UA"                  # v1 string fallback
