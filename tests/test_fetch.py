@@ -70,10 +70,12 @@ def test_fetch_in_browserless_posts_function_and_returns_json():
     assert out == {"data": {"dataList": [1, 2]}}
     args, kwargs = mock_post.call_args
     assert args[0] == "http://bl:3000/function"
-    assert kwargs["json"]["code"].count("szwtfz.maitix.com") == 2   # page + API url
-    assert "waitForTimeout(cfg.waitMs)" in kwargs["json"]["code"]
-    assert '"waitMs": 6000' in kwargs["json"]["code"]
-    assert "credentials: 'include'" in kwargs["json"]["code"]
+    body = kwargs["data"].decode()
+    assert kwargs["headers"]["Content-Type"] == "application/javascript"
+    assert body.count("szwtfz.maitix.com") == 2          # page + API url
+    assert "waitForTimeout(cfg.waitMs)" in body
+    assert '"waitMs": 6000' in body
+    assert "credentials: 'include'" in body
     assert kwargs["timeout"] == 40
 
 
@@ -95,8 +97,8 @@ def test_fetch_in_browserless_raises_on_non_json():
 
 
 def test_fetch_in_browserless_falls_back_to_v1_function_key():
-    """v1 browserless rejects `code` (unknown field) with 4xx — must retry
-    with the legacy `function` key."""
+    """v1 browserless rejects raw-JS bodies — must retry with the legacy
+    JSON `{"function": "module.exports = ..."}` form."""
     class Ok:
         ok = True
         def json(self):
@@ -108,8 +110,8 @@ def test_fetch_in_browserless_falls_back_to_v1_function_key():
         text = '{"error":"code is not a function"}'
 
     calls = []
-    def fake_post(url, json=None, timeout=None):
-        calls.append((url, json))
+    def fake_post(url, **kwargs):
+        calls.append(kwargs)
         if len(calls) == 1:
             return Bad()
         return Ok()
@@ -118,10 +120,11 @@ def test_fetch_in_browserless_falls_back_to_v1_function_key():
         out = fetch_in_browserless("http://bl:3000", "http://p/",
                                    {"url": "http://a/"}, timeout=30)
     assert out == {"n": 1}
-    assert list(calls[0][1]) == ["code"]           # v2 first
-    assert list(calls[1][1]) == ["function"]       # v1 fallback on 4xx
-    assert calls[1][1]["function"].replace("module.exports = ", "") \
-        == calls[0][1]["code"].replace("export default ", "")   # same body
+    assert "data" in calls[0] and calls[0]["data"].startswith(b"export default ")
+    assert "json" in calls[1]
+    assert list(calls[1]["json"]) == ["function"]       # v1 fallback on 4xx
+    assert calls[1]["json"]["function"].replace("module.exports = ", "") \
+        == calls[0]["data"].decode().replace("export default ", "")   # same body
 
 
 def test_content_falls_back_to_v1_string_user_agent():
@@ -147,8 +150,8 @@ def test_content_falls_back_to_v1_string_user_agent():
 
 
 def test_function_code_uses_esm_export_default():
-    """v2 /function runs the script as an ES module — must be prefixed with
-    `export default` (v1 needs `module.exports`)."""
+    """v2 /function runs the script as an ES module — the raw-JS body must be
+    prefixed with `export default` (v1 JSON fallback uses `module.exports`)."""
     class Ok:
         ok = True
         status_code = 200
@@ -156,10 +159,11 @@ def test_function_code_uses_esm_export_default():
             return {"__ok": True, "data": {"ok": 1}}
 
     calls = []
-    def fake_post(url, json=None, timeout=None):
-        calls.append(json)
+    def fake_post(url, **kwargs):
+        calls.append(kwargs)
         return Ok()
 
     with patch("rssrob.fetch.requests.post", side_effect=fake_post):
         fetch_in_browserless("http://bl:3000", "http://p/", {"url": "http://a/"})
-    assert calls[0]["code"].startswith("export default")               # v2 ESM
+    assert calls[0]["data"].startswith(b"export default ")               # v2 ESM
+    assert calls[0]["headers"]["Content-Type"] == "application/javascript"

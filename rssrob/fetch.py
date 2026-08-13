@@ -63,11 +63,17 @@ def fetch_in_browserless(browserless_url, page_url, api, timeout: int = 30):
       }, cfg);
     }
     """ % json.dumps(cfg)
-    # v2 runs the function in-browser as an ES module; v1 wants CommonJS.
-    resp = _post_browserless(f"{normalize_browserless(browserless_url)}/function",
-                             {"code": "export default " + code},   # v2 (ESM)
-                             {"function": "module.exports = " + code},  # v1
-                             timeout + 10)
+    base = normalize_browserless(browserless_url)
+    # v2 runs the code in-browser as an ES module — send it as raw JavaScript
+    # (the documented /function usage). v1 wants a JSON {"function": ...}.
+    resp = requests.post(f"{base}/function",
+                         data=("export default " + code).encode(),
+                         headers={"Content-Type": "application/javascript"},
+                         timeout=timeout + 10)
+    if resp.status_code == 400:      # v1 fallback
+        resp = requests.post(f"{base}/function",
+                             json={"function": "module.exports = " + code},
+                             timeout=timeout + 10)
     if not resp.ok:
         _raise_browserless_error(resp)
     out = resp.json()
