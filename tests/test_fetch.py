@@ -77,7 +77,7 @@ def test_fetch_in_browserless_posts_function_and_returns_json():
     assert "captured" in body
     assert '"waitMs": 6000' in body
     assert "credentials: 'include'" in body
-    assert kwargs["timeout"] == 40
+    assert kwargs["timeout"] == 60     # floored at 60s for slow WAF pages
 
 
 def test_fetch_in_browserless_raises_on_non_json():

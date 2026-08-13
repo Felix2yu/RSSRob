@@ -41,9 +41,14 @@ def obtain_items(site: Site, fetcher,
     if site.type == "pageapi":
         # The API must be fetched from inside the rendered page so the WAF's
         # runtime-generated signature headers are attached automatically.
-        doc = fetcher.fetch_page_api(site.url, site.api, timeout=site.timeout)
+        # A browserless round-trip can fail transiently (render timeout, WAF
+        # session) — retry once on exception or empty result.
+        try:
+            doc = fetcher.fetch_page_api(site.url, site.api, timeout=site.timeout)
+        except Exception:
+            doc = fetcher.fetch_page_api(site.url, site.api, timeout=site.timeout)
         items = extract.extract_json_items(doc, site.item, site.fields)
-        if not items:     # WAF session may have expired — one reload + retry
+        if not items:
             doc = fetcher.fetch_page_api(site.url, site.api, timeout=site.timeout)
             items = extract.extract_json_items(doc, site.item, site.fields)
         return items, None, None

@@ -359,3 +359,24 @@ def test_obtain_items_pageapi_requires_browserless():
     import pytest
     with pytest.raises(RuntimeError):
         obtain_items(site, NoBrowserFetcher())
+
+
+def test_obtain_items_pageapi_retries_on_exception():
+    site = Site(
+        name="szwtfz", url="https://szwtfz.maitix.com/h5/", type="pageapi",
+        api={"url": "https://client.maitix.com/api/pro/projects"},
+        item="$.data.dataList", fields={"title": "$.projectName"},
+    )
+    calls = []
+
+    class FakeFetcher:
+        browserless = "http://bl:3000"
+        def fetch_page_api(self, page_url, api, timeout=20):
+            calls.append(api)
+            if len(calls) == 1:                    # transient browserless error
+                raise RuntimeError("Invalid data (value is no dictionary)")
+            return {"data": {"dataList": [{"projectToken": "A1", "projectName": "X"}]}}
+
+    items, _, _ = obtain_items(site, FakeFetcher())
+    assert len(calls) == 2
+    assert len(items) == 1

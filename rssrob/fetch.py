@@ -104,11 +104,18 @@ def fetch_in_browserless(browserless_url, page_url, api, timeout: int = 30):
     base = normalize_browserless(browserless_url)
     # v2 runs the code in-browser as an ES module — send it as raw JavaScript
     # (the documented /function usage). v1 wants a JSON {"function": ...}.
+    # Rendering + WAF SDK init can take a while — never let the request
+    # time out before 60s.
     attempts = []
-    resp = requests.post(f"{base}/function",
-                         data=("export default " + code).encode(),
-                         headers={"Content-Type": "application/javascript"},
-                         timeout=timeout + 10)
+    try:
+        resp = requests.post(f"{base}/function",
+                             data=("export default " + code).encode(),
+                             headers={"Content-Type": "application/javascript"},
+                             timeout=max(timeout + 10, 60))
+    except requests.Timeout as e:
+        raise RuntimeError(
+            f"browserless /function timed out after {max(timeout + 10, 60)}s "
+            "(page render + WAF SDK init too slow)") from e
     attempts.append(resp)
     if resp.status_code == 400:      # v1 fallback
         resp = requests.post(f"{base}/function",
