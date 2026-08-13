@@ -30,7 +30,7 @@ def test_fetcher_renders_via_browserless_content_api():
     args, kwargs = mock_post.call_args
     assert args[0] == "http://localhost:3000/content"     # scheme added
     assert kwargs["json"]["url"] == "http://x/"
-    assert kwargs["json"]["userAgent"] == "UA"
+    assert kwargs["json"]["userAgent"] == {"userAgent": "UA"}  # v2 object form
     assert kwargs["json"]["waitForTimeout"] == 3000
     assert kwargs["timeout"] == 30                        # browser headroom
 

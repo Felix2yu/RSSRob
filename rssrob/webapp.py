@@ -392,7 +392,8 @@ class FallbackFetcher:
             if self.browserless:
                 resp = requests.post(
                     f"{self.browserless}/content",
-                    json={"url": url, "userAgent": user_agent,
+                    json={"url": url,
+                          "userAgent": {"userAgent": user_agent},   # v2: object
                           "waitForTimeout": 3000,
                           "gotoOptions": {"waitUntil": "domcontentloaded"}},
                     timeout=timeout + 10)

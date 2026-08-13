@@ -85,7 +85,7 @@ class Fetcher:
         cookies to the final response."""
         body = {
             "url": url,
-            "userAgent": user_agent,
+            "userAgent": {"userAgent": user_agent},   # v2: object, not string
             "waitForTimeout": 3000,
             "gotoOptions": {"waitUntil": "domcontentloaded"},
         }
