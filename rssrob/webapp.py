@@ -415,8 +415,7 @@ class FallbackFetcher:
                     return f.read()
             raise
 
-
-def fetch_page_api(self, page_url, api, timeout=30):
+    def fetch_page_api(self, page_url, api, timeout=30):
         """In-page API fetch (pageapi feeds) via the browserless service."""
         if not self.browserless:
             raise RuntimeError(

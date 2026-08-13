@@ -363,3 +363,18 @@ def test_edit_prefills_pageapi_fields(tmp_path):
     assert 'value="6000"' in html                                          # api_wait
     assert "$.data.dataList" in html                                       # item
     assert "projectTypeName" in html                                       # category
+
+
+def test_fallback_fetcher_has_fetch_page_api(tmp_path, monkeypatch):
+    """pageapi preview uses FallbackFetcher.fetch_page_api — must exist and
+    delegate to fetch_in_browserless (regression: it once landed outside the
+    class and previews crashed with AttributeError)."""
+    wa = _load_webapp()
+    called = []
+    monkeypatch.setattr(wa, "fetch_in_browserless",
+                        lambda *a, **k: called.append(a) or {"data": []})
+    ff = wa.FallbackFetcher({}, browserless="http://bl:3000")
+    out = ff.fetch_page_api("http://page/", {"url": "http://api/"}, timeout=30)
+    assert out == {"data": []}
+    assert called == [("http://bl:3000", "http://page/", {"url": "http://api/"}, 30)]
+    assert "fetch_page_api" in dir(wa.FallbackFetcher)   # method on the class
