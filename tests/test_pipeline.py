@@ -387,5 +387,5 @@ def test_run_cycle_pageapi_category_renders_in_feed(tmp_path):
     from rssrob.models import Item
     site = Site(name="p", url="http://p/", type="pageapi",
                 api={"url": "http://a/"}, item="$.a", fields={"title": "$.t"})
-    xml = build_feed(site, [Item(id="1", title="X", category="音乐会")]).decode()
+    xml = build_feed(site, [Item(id="1", title="X", category="音乐会", published=1000.0, first_seen=2000.0)]).decode()
     assert "<category>音乐会</category>" in xml
