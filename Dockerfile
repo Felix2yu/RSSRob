@@ -25,4 +25,8 @@ USER rssrob
 
 EXPOSE 5000
 
+# 基底是 python:slim，镜像内没有 curl/wget，用解释器自带的 urllib 探活。
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD ["python", "-c", "import sys,urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=3).status == 200 else 1)"]
+
 ENTRYPOINT ["/bin/sh", "./docker-entrypoint.sh"]
